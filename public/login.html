@@ -106,7 +106,13 @@ document.getElementById('btn-login').addEventListener('click', async () => {
   try {
     const data = await API.post('/login', { username, password });
     API.setSession(data.token, data.user);
-    window.location.href = data.user.role === 'admin' ? '/admin.html' : '/user.html';
+    console.log('[Login] Usuario guardado:', data.user);
+    // Redirige a admin si role es exactamente 'admin'
+    if (data.user.role === 'admin') {
+      window.location.href = '/admin.html';
+    } else {
+      window.location.href = '/user.html';
+    }
   } catch (e) {
     errEl.textContent = e.message; errEl.classList.remove('hidden');
   }

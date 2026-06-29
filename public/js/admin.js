@@ -29,13 +29,24 @@ function showAdminStatus(message, kind = 'info') {
   }
 }
 
-if (!API.isLoggedIn()) {
-  showAdminGuard();
-} else if (!API.isAdmin()) {
-  showAdminGuard('Tu cuenta no tiene permisos de administrador.');
-} else {
-  initAdmin();
-}
+/* Función pública para reiniciar admin (llamada después de login) */
+window.checkAdminAccess = function() {
+  const user = API.user();
+  console.log('[Admin] Usuario:', user);
+  console.log('[Admin] Role:', user?.role);
+  
+  // Simplemente: si hay usuario con role 'admin', mostrar panel
+  if (user && user.role === 'admin') {
+    console.log('[Admin] Acceso permitido - iniciando panel');
+    initAdmin();
+  } else {
+    console.log('[Admin] Acceso denegado - mostrando guard');
+    showAdminGuard();
+  }
+};
+
+// Verificar acceso al cargar el archivo
+window.checkAdminAccess();
 
 /* ── Helpers ─────────────────────────────────────── */
 const toast = (msg, dur = 2800) => {
@@ -60,17 +71,137 @@ function fillRaritySelect(selId, selectedId = 1) {
   ).join('');
 }
 
-/* ── Usuario logueado ────────────────────────────── */
-$('#admin-username').textContent = `👤 ${API.user()?.username || ''}`;
-$('#btn-logout').addEventListener('click', () => { API.clearSession(); window.location.href = '/'; });
+/* ── Setup de eventos (se llamará después de verificar acceso) ── */
+function setupAdminEventListeners() {
+  // Usuario logueado
+  const usernameEl = $('#admin-username');
+  if (usernameEl) usernameEl.textContent = `👤 ${API.user()?.username || ''}`;
+  
+  const logoutBtn = $('#btn-logout');
+  if (logoutBtn) logoutBtn.addEventListener('click', () => { API.clearSession(); window.location.href = '/'; });
 
-/* ── Navegación sidebar ──────────────────────────── */
-$$('.snav-btn').forEach(btn => btn.addEventListener('click', () => {
-  $$('.snav-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  $$('.admin-section').forEach(s => s.classList.add('hidden'));
-  $(`#panel-${btn.dataset.panel}`).classList.remove('hidden');
-}));
+  // Navegación sidebar
+  $$('.snav-btn').forEach(btn => btn.addEventListener('click', () => {
+    $$('.snav-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    $$('.admin-section').forEach(s => s.classList.add('hidden'));
+    const panel = $(`#panel-${btn.dataset.panel}`);
+    if (panel) panel.classList.remove('hidden');
+  }));
+  
+  // Botones de ruletas
+  const btnNewRoulette = $('#btn-new-roulette');
+  if (btnNewRoulette) btnNewRoulette.addEventListener('click', () => openRouletteEditor(null));
+  
+  const editorClose = $('#editor-r-close');
+  if (editorClose) editorClose.addEventListener('click', closeEditor);
+  
+  const edCancel = $('#ed-cancel');
+  if (edCancel) edCancel.addEventListener('click', closeEditor);
+  
+  const edSave = $('#ed-save');
+  if (edSave) edSave.addEventListener('click', async () => {
+    const name = $('#ed-name').value.trim();
+    if (!name) { toast('El nombre es obligatorio'); return; }
+
+    const rawProbs = optionsData.map(o => parseFloat(o.prob) || 0);
+    const normProbs = ProbManager.normalize(rawProbs);
+    optionsData.forEach((o, i) => { o.prob = normProbs[i]; });
+
+    const body = {
+      id: editingId || genId(),
+      name,
+      type:      $('#ed-type').value,
+      rarity_id: parseInt($('#ed-rarity').value),
+      desc:      $('#ed-desc').value.trim(),
+      img:       $('#ed-img').value.trim(),
+      adaptSize: $('#ed-adapt').checked,
+      options:   optionsData,
+    };
+
+    try {
+      if (editingId) await API.put(`/roulettes/${editingId}`, body);
+      else           await API.post('/roulettes', body);
+      toast('Ruleta guardada ✓');
+      closeEditor();
+      await loadRoulettes();
+    } catch (e) { toast('Error: ' + e.message); }
+  });
+  
+  const edDelete = $('#ed-delete');
+  if (edDelete) edDelete.addEventListener('click', async () => {
+    if (!editingId) return;
+    await deleteRoulette(editingId);
+    closeEditor();
+  });
+  
+  const btnAddOpt = $('#btn-add-opt');
+  if (btnAddOpt) btnAddOpt.addEventListener('click', () => {
+    const n = optionsData.length + 1;
+    const eq = ProbManager.equalDistrib(n);
+    const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '' };
+    optionsData.push(newOpt);
+    optionsData.forEach((o, i) => { o.prob = eq[i]; });
+    refreshOptsList();
+    setTimeout(() => {
+      const items = $$('#opts-list details');
+      if (items.length) items[items.length - 1].open = true;
+    }, 20);
+  });
+  
+  // Playlist
+  const plAdd = $('#pl-add');
+  if (plAdd) plAdd.addEventListener('click', async () => {
+    const url   = $('#pl-url').value.trim();
+    const title = $('#pl-title').value.trim();
+    if (!url) { toast('Introduce una URL de YouTube'); return; }
+    try {
+      await MusicPlayer.addTrack(url, title);
+      $('#pl-url').value = ''; $('#pl-title').value = '';
+      await loadPlaylist();
+      toast('Canción añadida ✓');
+    } catch (e) { toast(e.message); }
+  });
+  
+  const plPrev = $('#pl-prev');
+  if (plPrev) plPrev.addEventListener('click', () => { MusicPlayer.prev(); setTimeout(() => loadPlaylist(), 300); });
+  
+  const plNext = $('#pl-next');
+  if (plNext) plNext.addEventListener('click', () => { MusicPlayer.next(); setTimeout(() => loadPlaylist(), 300); });
+  
+  const plPlay = $('#pl-play');
+  if (plPlay) plPlay.addEventListener('click', () => {
+    MusicPlayer.toggle();
+    setTimeout(() => { $('#pl-play').textContent = MusicPlayer.playing ? '⏸ Pausa' : '▶ Play'; }, 300);
+  });
+  
+  const plShuffle = $('#pl-shuffle');
+  if (plShuffle) plShuffle.addEventListener('change', e => { MusicPlayer.shuffle = e.target.checked; });
+  
+  const plLoop = $('#pl-loop');
+  if (plLoop) plLoop.addEventListener('change', e => { MusicPlayer.loop = e.target.checked; });
+  
+  const plVol = $('#pl-vol');
+  if (plVol) plVol.addEventListener('input', e => { MusicPlayer.setVolume(+e.target.value); });
+  
+  // Info page
+  const btnSaveInfo = $('#btn-save-info');
+  if (btnSaveInfo) btnSaveInfo.addEventListener('click', async () => {
+    const content = $('#info-editor').value;
+    try {
+      await API.put('/settings', { info_page: content });
+      toast('Página de información guardada ✓');
+    } catch (e) { toast(e.message); }
+  });
+  
+  const btnPreviewInfo = $('#btn-preview-info');
+  if (btnPreviewInfo) btnPreviewInfo.addEventListener('click', () => {
+    const preview = $('#info-preview');
+    preview.innerHTML = $('#info-editor').value;
+    preview.classList.toggle('hidden');
+    $('#btn-preview-info').textContent = preview.classList.contains('hidden') ? '👁 Vista previa' : '🙈 Ocultar';
+  });
+}
 
 /* ── Partículas ──────────────────────────────────── */
 (function () {
@@ -134,10 +265,6 @@ async function deleteRoulette(id) {
   toast('Ruleta eliminada');
   await loadRoulettes();
 }
-
-$('#btn-new-roulette').addEventListener('click', () => openRouletteEditor(null));
-$('#editor-r-close').addEventListener('click', closeEditor);
-$('#ed-cancel').addEventListener('click', closeEditor);
 
 function closeEditor() {
   $('#roulette-editor').classList.add('hidden');
@@ -376,14 +503,18 @@ function fillUserSelects() {
   allUsers.forEach(u => {
     sel.innerHTML += `<option value="${u.id}" ${u.id == cur ? 'selected' : ''}>${u.username}</option>`;
   });
+  
+  // Setup change listener
+  const ticketUserSel = $('#ticket-user-sel');
+  if (ticketUserSel) {
+    ticketUserSel.addEventListener('change', async e => {
+      const uid = e.target.value;
+      if (!uid) { $('#ticket-manager').classList.add('hidden'); return; }
+      const user = allUsers.find(u => u.id == uid);
+      await loadUserTickets(uid, user?.username || uid);
+    });
+  }
 }
-
-$('#ticket-user-sel').addEventListener('change', async e => {
-  const uid = e.target.value;
-  if (!uid) { $('#ticket-manager').classList.add('hidden'); return; }
-  const user = allUsers.find(u => u.id == uid);
-  await loadUserTickets(uid, user?.username || uid);
-});
 
 async function loadUserTickets(uid, username) {
   try {
@@ -466,31 +597,6 @@ function renderAdminPlaylist(tracks) {
   });
 }
 
-$('#pl-add').addEventListener('click', async () => {
-  const url   = $('#pl-url').value.trim();
-  const title = $('#pl-title').value.trim();
-  if (!url) { toast('Introduce una URL de YouTube'); return; }
-  try {
-    await MusicPlayer.addTrack(url, title);
-    $('#pl-url').value = ''; $('#pl-title').value = '';
-    await loadPlaylist();
-    toast('Canción añadida ✓');
-  } catch (e) { toast(e.message); }
-});
-
-$('#pl-prev').addEventListener('click', () => { MusicPlayer.prev(); setTimeout(() => loadPlaylist(), 300); });
-$('#pl-next').addEventListener('click', () => { MusicPlayer.next(); setTimeout(() => loadPlaylist(), 300); });
-$('#pl-play').addEventListener('click', () => {
-  MusicPlayer.toggle();
-  setTimeout(() => { $('#pl-play').textContent = MusicPlayer.playing ? '⏸ Pausa' : '▶ Play'; }, 300);
-});
-$('#pl-shuffle').addEventListener('change', e => { MusicPlayer.shuffle = e.target.checked; });
-$('#pl-loop').addEventListener('change',   e => { MusicPlayer.loop    = e.target.checked; });
-$('#pl-vol').addEventListener('input', e => { MusicPlayer.setVolume(+e.target.value); });
-
-/* ══════════════════════════════════════════════════
-   INFO PAGE
-   ══════════════════════════════════════════════════ */
 async function loadInfoPage() {
   try {
     const settings = await API.get('/settings');
@@ -501,35 +607,45 @@ async function loadInfoPage() {
   }
 }
 
-$('#btn-save-info').addEventListener('click', async () => {
-  const content = $('#info-editor').value;
-  try {
-    await API.put('/settings', { info_page: content });
-    toast('Página de información guardada ✓');
-  } catch (e) { toast(e.message); }
-});
-
-$('#btn-preview-info').addEventListener('click', () => {
-  const preview = $('#info-preview');
-  preview.innerHTML = $('#info-editor').value;
-  preview.classList.toggle('hidden');
-  $('#btn-preview-info').textContent = preview.classList.contains('hidden') ? '👁 Vista previa' : '🙈 Ocultar';
-});
-
 /* ══════════════════════════════════════════════════
    INIT
    ══════════════════════════════════════════════════ */
 async function initAdmin() {
   try {
+    // Ocultar guard si estaba visible
+    const guard = $('#admin-guard');
+    if (guard) guard.classList.add('hidden');
+    
+    // Mostrar el layout del admin
+    const layout = $('#admin-layout');
+    if (layout) {
+      layout.classList.remove('hidden');
+      console.log('[Admin] Layout mostrado');
+    } else {
+      throw new Error('No se encontró el elemento #admin-layout');
+    }
+    
+    // Setup event listeners
+    setupAdminEventListeners();
+    console.log('[Admin] Event listeners configurados');
+    
+    // Cargar datos
     await Promise.allSettled([
       loadRoulettes(),
       loadUsers(),
       loadPlaylist(),
       loadInfoPage(),
     ]);
+    console.log('[Admin] Datos cargados');
+    
     await MusicPlayer.init();
     showAdminStatus('Panel de administración listo', 'info');
+    console.log('[Admin] Panel listo');
   } catch (e) {
+    console.error('[Admin] Error:', e.message);
     showAdminStatus(`No se pudo inicializar el panel: ${e.message}`, 'error');
+    // Volver a mostrar guard en caso de error
+    const guard = $('#admin-guard');
+    if (guard) guard.classList.remove('hidden');
   }
 }
