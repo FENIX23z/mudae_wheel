@@ -1,0 +1,144 @@
+/* css/admin.css */
+.admin-layout{display:flex;min-height:100vh;position:relative;z-index:5}
+
+/* ── Sidebar ─────────────────────────────────────── */
+.admin-sidebar{
+  width:210px;flex-shrink:0;
+  background:var(--bg-dark);
+  border-right:1px solid rgba(176,107,32,.35);
+  display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;overflow-y:auto;
+}
+.sidebar-logo{display:flex;align-items:center;gap:12px;padding:22px 18px 18px;border-bottom:1px solid rgba(176,107,32,.25)}
+.sidebar-nav{flex:1;padding:12px 0}
+.snav-btn{
+  display:block;width:100%;padding:11px 18px;text-align:left;
+  background:transparent;border:none;border-left:3px solid transparent;
+  color:var(--text-m);font-family:var(--font-u);font-size:.82rem;
+  letter-spacing:1px;cursor:pointer;transition:all .18s;
+}
+.snav-btn:hover{color:var(--copper-l);background:rgba(176,107,32,.08)}
+.snav-btn.active{color:var(--gold-l);border-left-color:var(--copper);background:rgba(176,107,32,.13)}
+.sidebar-footer{padding:14px 16px;border-top:1px solid rgba(176,107,32,.25)}
+
+/* ── Main ────────────────────────────────────────── */
+.admin-main{flex:1;padding:32px 30px 90px;overflow-y:auto;min-width:0}
+.admin-section{display:block}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px}
+.section-head h2{font-family:var(--font-d);font-size:1.2rem;color:var(--gold-l);letter-spacing:2px}
+
+/* ── Item list ───────────────────────────────────── */
+.item-list{display:flex;flex-direction:column;gap:8px}
+.list-item{
+  background:var(--bg-card);border:1px solid rgba(176,107,32,.35);
+  border-radius:8px;display:flex;align-items:center;gap:12px;
+  padding:11px 14px;transition:border-color .18s;
+}
+.list-item:hover{border-color:var(--copper)}
+.list-item-bar{width:5px;height:34px;border-radius:3px;flex-shrink:0}
+.list-item-info{flex:1;min-width:0}
+.list-item-name{font-family:var(--font-u);color:var(--gold-l);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-item-meta{font-size:.75rem;color:var(--text-d);margin-top:2px}
+.list-item-actions{display:flex;gap:5px;flex-shrink:0}
+
+/* ── Side editor ─────────────────────────────────── */
+.side-editor{
+  position:fixed;top:0;right:0;bottom:0;
+  width:min(500px,100vw);
+  background:var(--bg-dark);
+  border-left:1px solid var(--copper);
+  z-index:200;overflow-y:auto;
+  animation:slide-in .28s ease;
+  box-shadow:-4px 0 30px rgba(0,0,0,.6);
+}
+@keyframes slide-in{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.side-editor-head{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 16px;border-bottom:1px solid rgba(176,107,32,.3);position:sticky;top:0;background:var(--bg-dark);z-index:2}
+.side-editor-head h3{font-family:var(--font-d);color:var(--gold-l);font-size:1rem;letter-spacing:2px}
+.btn-icon{background:transparent;border:1px solid var(--copper);color:var(--copper);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.btn-icon:hover{background:var(--rust);border-color:var(--rust);color:#fff}
+.editor-body{padding:20px 22px}
+
+/* ── Option items in editor ──────────────────────── */
+.opt-item{
+  background:var(--bg-panel);border:1px solid rgba(176,107,32,.3);
+  border-radius:7px;margin-bottom:8px;overflow:hidden;
+}
+.opt-item summary{
+  cursor:pointer;padding:10px 14px;
+  font-family:var(--font-u);font-size:.82rem;color:var(--copper-l);
+  letter-spacing:1px;list-style:none;
+  display:flex;align-items:center;justify-content:space-between;
+  user-select:none;
+}
+.opt-item summary::-webkit-details-marker{display:none}
+.opt-item summary::after{content:'▾';color:var(--text-d);margin-left:6px}
+details[open]>.opt-item summary::after,
+.opt-item[open]>summary::after{content:'▴'}
+.opt-fields{padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid rgba(176,107,32,.2)}
+.opt-fields label{font-size:.72rem;color:var(--text-d);font-family:var(--font-u);letter-spacing:1px}
+.opt-fields input,.opt-fields select,.opt-fields textarea{
+  width:100%;padding:7px 10px;
+  background:var(--bg-dark);border:1px solid rgba(176,107,32,.4);
+  color:var(--text);border-radius:4px;font-family:var(--font-b);font-size:.88rem;
+}
+.opt-fields textarea{min-height:50px;resize:vertical}
+.prob-row{display:flex;align-items:center;gap:8px}
+.prob-row input[type=number]{width:72px}
+.prob-row input[type=range]{flex:1;accent-color:var(--copper)}
+.prob-row span{font-size:.8rem;color:var(--text-d);min-width:35px;text-align:right}
+.opt-del{background:none;border:none;color:var(--rust);cursor:pointer;font-size:.85rem;padding:0 2px;transition:color .15s}
+.opt-del:hover{color:#ef5350}
+
+/* ── Prob total bar ──────────────────────────────── */
+.prob-bar-wrap{height:6px;background:var(--bg-mid);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.prob-bar-fill{height:100%;border-radius:3px;transition:width .3s,background .3s}
+
+/* ── Users table ─────────────────────────────────── */
+.user-row{
+  background:var(--bg-card);border:1px solid rgba(176,107,32,.3);
+  border-radius:8px;padding:12px 16px;
+  display:flex;align-items:center;gap:12px;
+  transition:border-color .18s;
+}
+.user-row:hover{border-color:var(--copper)}
+.user-avatar{width:36px;height:36px;border-radius:50%;background:var(--bg-mid);border:1px solid var(--copper);display:flex;align-items:center;justify-content:center;font-family:var(--font-d);font-size:.9rem;color:var(--copper-l);flex-shrink:0}
+.user-info{flex:1;min-width:0}
+.user-name{font-family:var(--font-u);color:var(--gold-l);font-size:.9rem}
+.user-meta{font-size:.75rem;color:var(--text-d);margin-top:2px}
+.role-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-family:var(--font-u);font-size:.7rem;letter-spacing:1px}
+.role-admin{background:rgba(255,193,7,.18);color:var(--r5);border:1px solid var(--r5)}
+.role-user{background:rgba(33,150,243,.12);color:var(--r3);border:1px solid var(--r3)}
+
+/* ── Ticket manager ──────────────────────────────── */
+.ticket-row{
+  display:flex;align-items:center;gap:14px;
+  background:var(--bg-card);border:1px solid rgba(176,107,32,.3);
+  border-radius:8px;padding:12px 16px;margin-bottom:8px;
+}
+.ticket-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.ticket-label{font-family:var(--font-u);font-size:.85rem;flex:1;letter-spacing:1px}
+.ticket-qty-display{font-family:var(--font-d);font-size:1.2rem;min-width:36px;text-align:center}
+.ticket-controls{display:flex;gap:6px;align-items:center}
+.tctl-input{width:60px;text-align:center;padding:5px;background:var(--bg-dark);border:1px solid var(--copper);color:var(--text);border-radius:4px;font-family:var(--font-u);font-size:.9rem}
+
+/* ── Playlist ─────────────────────────────────────── */
+.pl-item{display:flex;align-items:center;gap:10px;background:var(--bg-card);border:1px solid rgba(176,107,32,.3);padding:9px 14px;border-radius:6px;margin-bottom:6px;transition:border-color .18s}
+.pl-item.now-playing{border-color:var(--copper);background:rgba(176,107,32,.1)}
+.pl-item-title{flex:1;font-family:var(--font-u);font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-play-btn,.pl-del-btn{background:none;border:none;cursor:pointer;font-size:1rem;padding:2px 4px}
+.pl-play-btn{color:var(--copper)}.pl-del-btn{color:var(--rust)}
+.pl-del-btn:hover{color:#ef5350}
+
+/* ── adm-select ───────────────────────────────────── */
+.adm-select{padding:8px 12px;background:var(--bg-dark);border:1px solid var(--copper);color:var(--text);border-radius:5px;font-family:var(--font-u);font-size:.82rem}
+
+/* ── Responsive ───────────────────────────────────── */
+@media(max-width:700px){
+  .admin-layout{flex-direction:column}
+  .admin-sidebar{width:100%;height:auto;position:relative;flex-direction:row;flex-wrap:wrap}
+  .sidebar-nav{display:flex;flex-wrap:wrap;padding:6px}
+  .snav-btn{width:auto;border-left:none;border-bottom:3px solid transparent;padding:8px 12px;font-size:.75rem}
+  .snav-btn.active{border-bottom-color:var(--copper);border-left:none}
+  .admin-main{padding:16px 14px 90px}
+  .side-editor{width:100vw}
+}

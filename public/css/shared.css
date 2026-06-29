@@ -1,0 +1,126 @@
+/* ═══════════════════════════════════════════════════
+   MUDAE WHEEL OF FATE — shared.css
+   ═══════════════════════════════════════════════════ */
+:root {
+  --bg-deep:      #0a0704;
+  --bg-dark:      #110d07;
+  --bg-mid:       #1c1409;
+  --bg-panel:     #221a0f;
+  --bg-card:      #2a1f0e;
+  --copper:       #b06b20;
+  --copper-l:     #d4892a;
+  --copper-glow:  #f5a93a;
+  --gold:         #c9a227;
+  --gold-l:       #e6c84a;
+  --rust:         #7a3b1a;
+  --text:         #f0e4c8;
+  --text-m:       #9b8060;
+  --text-d:       #5a4535;
+  --glow-cu:  0 0 12px rgba(176,107,32,.5),0 0 30px rgba(176,107,32,.2);
+  --r1: #9a9a9a; --r2: #4caf50; --r3: #2196f3;
+  --r4: #9c27b0; --r5: #ffc107; --r6: #e53935;
+  --font-d: 'Cinzel Decorative', serif;
+  --font-b: 'Crimson Text', serif;
+  --font-u: 'IM Fell English SC', serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg-deep);color:var(--text);font-family:var(--font-b);font-size:17px;min-height:100vh;overflow-x:hidden}
+.hidden{display:none!important}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg-dark)}
+::-webkit-scrollbar-thumb{background:var(--copper);border-radius:3px}
+
+/* ── Steam BG ─────────────────────────────────────────────── */
+#steam-bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+#steam-bg canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.4}
+.gear-bg{position:absolute;font-size:clamp(140px,20vw,300px);color:rgba(176,107,32,.04);user-select:none;animation:gspin linear infinite;line-height:1}
+.g1{top:-50px;left:-50px;animation-duration:90s}
+.g2{bottom:-70px;right:-70px;animation-duration:70s;animation-direction:reverse}
+.g3{top:40%;left:55%;animation-duration:110s;font-size:200px}
+@keyframes gspin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── Typography helpers ───────────────────────────────────── */
+.title-display{font-family:var(--font-d);background:linear-gradient(180deg,var(--gold-l),var(--copper-l) 60%,var(--rust));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 2px 8px rgba(201,162,39,.4))}
+.label-ui{font-family:var(--font-u);letter-spacing:2px;font-size:.82rem;color:var(--text-m)}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:6px;font-family:var(--font-u);font-size:.85rem;letter-spacing:1px;cursor:pointer;transition:all .2s;border:1px solid var(--copper);background:var(--bg-mid);color:var(--copper-l)}
+.btn:hover{background:var(--copper);color:var(--bg-deep)}
+.btn-primary{background:linear-gradient(135deg,#3a1f05,#6b3810);border-color:var(--copper-l);color:var(--gold-l)}
+.btn-primary:hover{background:var(--copper);color:var(--bg-deep);box-shadow:var(--glow-cu)}
+.btn-danger{border-color:#c62828;color:#ef5350;background:transparent}
+.btn-danger:hover{background:#c62828;color:#fff}
+.btn-ghost{background:transparent;border-color:var(--text-d);color:var(--text-m)}
+.btn-ghost:hover{border-color:var(--copper);color:var(--copper)}
+.btn-sm{padding:5px 12px;font-size:.78rem}
+.btn-lg{padding:14px 28px;font-size:1rem;letter-spacing:2px}
+.btn:disabled{opacity:.4;pointer-events:none}
+
+/* ── Ticket Spin Button ───────────────────────────────────── */
+.spin-button{width:100%;padding:14px;background:linear-gradient(135deg,#3a1f05,#6b3810,#3a1f05);border:2px solid var(--copper-l);color:var(--gold-l);font-family:var(--font-d);font-size:.95rem;letter-spacing:2px;border-radius:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.spin-button:hover{background:linear-gradient(135deg,#5a2f08,#9b5215,#5a2f08);box-shadow:var(--glow-cu);transform:translateY(-2px)}
+.spin-button:disabled{opacity:.4;pointer-events:none}
+
+/* ── Forms ────────────────────────────────────────────────── */
+.form-group{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.form-group label{font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:1px}
+.form-group input,.form-group select,.form-group textarea{padding:10px 14px;background:var(--bg-mid);border:1px solid rgba(176,107,32,.5);color:var(--text);border-radius:5px;font-family:var(--font-b);font-size:.95rem;transition:border-color .2s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--copper);box-shadow:0 0 10px rgba(176,107,32,.25)}
+.form-group textarea{min-height:80px;resize:vertical}
+.check-row{flex-direction:row!important;align-items:center;gap:10px!important}
+.check-row input[type=checkbox]{accent-color:var(--copper);width:16px;height:16px}
+
+/* ── Cards ────────────────────────────────────────────────── */
+.card{background:var(--bg-card);border:1px solid var(--copper);border-radius:12px;overflow:hidden}
+.card-body{padding:18px}
+.panel{background:var(--bg-panel);border:1px solid rgba(176,107,32,.35);border-radius:10px;padding:20px}
+
+/* ── Header ──────────────────────────────────────────────── */
+.site-header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:20px 36px;border-bottom:1px solid rgba(176,107,32,.3);background:linear-gradient(180deg,rgba(10,7,4,.97),transparent)}
+.site-header .logo{font-family:var(--font-d);font-size:1.3rem;font-weight:900;letter-spacing:3px;background:linear-gradient(180deg,var(--gold-l),var(--copper-l));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.site-header .logo span{font-size:.55em;letter-spacing:6px;display:block}
+.header-gear{font-size:1.6rem;color:var(--copper);animation:gspin 12s linear infinite}
+.header-gear.rev{animation-direction:reverse}
+.header-nav{display:flex;align-items:center;gap:10px}
+
+/* ── Music Bar ───────────────────────────────────────────── */
+#music-bar{position:fixed;bottom:0;left:0;right:0;z-index:900;display:flex;align-items:center;gap:10px;padding:7px 18px;background:linear-gradient(90deg,#1a0f04f0,#0f0a03f0);border-top:1px solid var(--copper);backdrop-filter:blur(6px)}
+.music-btn{background:var(--copper);border:none;color:var(--bg-deep);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:12px;font-weight:bold;transition:background .2s}
+.music-btn:hover{background:var(--copper-glow)}
+#music-title{flex:1;font-family:var(--font-u);font-size:12px;color:var(--text-m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#music-vol{width:80px;accent-color:var(--copper)}
+
+/* ── Rarity badges ───────────────────────────────────────── */
+.badge{display:inline-block;font-family:var(--font-u);font-size:.72rem;letter-spacing:2px;padding:2px 10px;border-radius:20px;border:1px solid currentColor}
+.badge-r1{color:var(--r1)} .badge-r2{color:var(--r2)} .badge-r3{color:var(--r3)}
+.badge-r4{color:var(--r4)} .badge-r5{color:var(--r5)} .badge-r6{color:var(--r6)}
+
+/* ── Ticket chips ─────────────────────────────────────────── */
+.ticket-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;border:1px solid currentColor;font-family:var(--font-u);font-size:.8rem}
+.ticket-chip .qty{font-size:1rem;font-weight:bold}
+
+/* ── Toast ───────────────────────────────────────────────── */
+#toast{position:fixed;bottom:54px;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:1px solid var(--copper);color:var(--text);padding:9px 22px;border-radius:30px;font-family:var(--font-u);font-size:.85rem;z-index:9999;box-shadow:var(--glow-cu);animation:toast-in .3s ease;white-space:nowrap}
+@keyframes toast-in{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ── Modal overlay ───────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;z-index:800;background:rgba(5,3,1,.9);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-box{position:relative;background:var(--bg-panel);border:1px solid var(--copper);border-radius:14px;padding:32px 28px;width:min(480px,96vw);max-height:92vh;overflow-y:auto;box-shadow:var(--glow-cu);animation:modal-in .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes modal-in{from{opacity:0;transform:scale(.85) translateY(24px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal-close{position:absolute;top:12px;right:14px;background:transparent;border:1px solid var(--copper);color:var(--copper);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;transition:all .2s}
+.modal-close:hover{background:var(--rust);border-color:var(--rust);color:#fff}
+.modal-title{font-family:var(--font-d);font-size:1.2rem;color:var(--gold-l);letter-spacing:2px;margin-bottom:20px;text-align:center}
+
+/* ── Sections ─────────────────────────────────────────────── */
+.section-label{font-family:var(--font-u);font-size:.82rem;letter-spacing:5px;color:var(--copper);text-align:center;margin-bottom:28px;opacity:.75}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty{text-align:center;padding:50px 20px;color:var(--text-d);font-family:var(--font-u)}
+.empty-icon{font-size:3rem;display:block;margin-bottom:12px;opacity:.3}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media(max-width:600px){
+  .site-header{padding:14px 16px}
+  .btn-lg{font-size:.85rem;padding:11px 18px}
+}

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mudae — Panel Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:wght@400;600&family=IM+Fell+English+SC&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/css/shared.css"/>
+<link rel="stylesheet" href="/css/admin.css"/>
+</head>
+<body>
+<div id="steam-bg">
+  <div class="gear-bg g1">⚙</div><div class="gear-bg g2">⚙</div><div class="gear-bg g3">⚙</div>
+  <canvas id="particles-canvas"></canvas>
+</div>
+<div style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1">
+  <iframe id="yt-frame" width="1" height="1" frameborder="0" allow="autoplay;encrypted-media" allowfullscreen></iframe>
+</div>
+<div id="music-bar">
+  <button id="music-prev" class="music-btn">⏮</button>
+  <button id="music-toggle" class="music-btn">▶</button>
+  <button id="music-next" class="music-btn">⏭</button>
+  <span id="music-title">♪ Sin música</span>
+  <input type="range" id="music-vol" min="0" max="100" value="50"/>
+  <span id="vol-icon">🔊</span>
+</div>
+
+<div class="admin-layout">
+  <!-- SIDEBAR -->
+  <aside class="admin-sidebar">
+    <div class="sidebar-logo">
+      <div style="font-size:1.8rem;color:var(--copper);animation:gspin 8s linear infinite">⚙</div>
+      <div>
+        <div style="font-family:var(--font-d);font-size:.85rem;color:var(--gold-l);letter-spacing:2px">MUDAE</div>
+        <div style="font-family:var(--font-u);font-size:.65rem;color:var(--text-m);letter-spacing:2px">ADMIN</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="snav-btn active" data-panel="roulettes">🎡 Ruletas</button>
+      <button class="snav-btn" data-panel="users">👥 Usuarios</button>
+      <button class="snav-btn" data-panel="tickets">🎟 Tickets</button>
+      <button class="snav-btn" data-panel="playlist">🎵 Playlist</button>
+      <button class="snav-btn" data-panel="info">📜 Info Page</button>
+    </nav>
+    <div class="sidebar-footer">
+      <span id="admin-username" style="font-family:var(--font-u);font-size:.75rem;color:var(--text-m)"></span>
+      <a href="/" class="btn btn-sm btn-ghost" style="display:block;margin-top:6px;text-align:center;text-decoration:none">🎡 Ver sitio</a>
+      <button class="btn btn-sm btn-ghost" id="btn-logout" style="width:100%;margin-top:4px">Salir</button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="admin-main">
+
+    <!-- ════ PANEL: RULETAS ════ -->
+    <section id="panel-roulettes" class="admin-section">
+      <div class="section-head">
+        <h2>Gestión de Ruletas</h2>
+        <button class="btn btn-primary" id="btn-new-roulette">＋ Nueva Ruleta</button>
+      </div>
+      <div id="roulettes-list" class="item-list"></div>
+
+      <!-- Editor lateral -->
+      <div id="roulette-editor" class="side-editor hidden">
+        <div class="side-editor-head">
+          <h3 id="editor-r-title">Nueva Ruleta</h3>
+          <button class="btn-icon" id="editor-r-close">✕</button>
+        </div>
+        <div class="editor-body">
+          <div class="form-group"><label>Nombre</label>
+            <input type="text" id="ed-name" placeholder="Nombre de la ruleta"/>
+          </div>
+          <div class="form-group"><label>Tipo</label>
+            <select id="ed-type">
+              <option value="normal">Normal (opciones)</option>
+              <option value="fortune">Fortuna (número aleatorio)</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Rareza</label>
+            <select id="ed-rarity"></select>
+          </div>
+          <div class="form-group"><label>Descripción</label>
+            <textarea id="ed-desc" placeholder="Descripción breve…"></textarea>
+          </div>
+          <div class="form-group"><label>Imagen (URL)</label>
+            <input type="text" id="ed-img" placeholder="https://…"/>
+          </div>
+          <div class="form-group check-row">
+            <input type="checkbox" id="ed-adapt"/>
+            <label for="ed-adapt">Adaptar tamaño visual al porcentaje</label>
+          </div>
+
+          <!-- OPCIONES -->
+          <div id="opts-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <h4 style="font-family:var(--font-u);color:var(--copper);letter-spacing:1px">Opciones</h4>
+              <button class="btn btn-sm" id="btn-add-opt">＋ Opción</button>
+            </div>
+            <!-- Prob global info -->
+            <div id="prob-total-bar" style="margin-bottom:10px;font-family:var(--font-u);font-size:.75rem;color:var(--text-m)">
+              Total: <span id="prob-total">0</span>% (autobalanceo activo)
+            </div>
+            <div id="opts-list"></div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="ed-save">💾 Guardar</button>
+            <button class="btn btn-ghost" id="ed-cancel">Cancelar</button>
+            <button class="btn btn-danger hidden" id="ed-delete">🗑 Eliminar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ PANEL: USUARIOS ════ -->
+    <section id="panel-users" class="admin-section hidden">
+      <div class="section-head">
+        <h2>Gestión de Usuarios</h2>
+        <span id="users-count" style="font-family:var(--font-u);font-size:.8rem;color:var(--text-m)"></span>
+      </div>
+      <div id="users-list" class="item-list"></div>
+    </section>
+
+    <!-- ════ PANEL: TICKETS ════ -->
+    <section id="panel-tickets" class="admin-section hidden">
+      <div class="section-head">
+        <h2>Gestión de Tickets</h2>
+        <div style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m)">Selecciona un usuario para gestionar sus tickets</div>
+      </div>
+      <div style="margin-bottom:18px">
+        <select id="ticket-user-sel" class="adm-select" style="min-width:220px">
+          <option value="">— Selecciona usuario —</option>
+        </select>
+      </div>
+      <div id="ticket-manager" class="hidden">
+        <h3 id="ticket-manager-name" style="font-family:var(--font-u);color:var(--gold-l);letter-spacing:2px;margin-bottom:16px"></h3>
+        <div id="ticket-rows"></div>
+      </div>
+    </section>
+
+    <!-- ════ PANEL: PLAYLIST ════ -->
+    <section id="panel-playlist" class="admin-section hidden">
+      <div class="section-head"><h2>Control de Playlist</h2></div>
+      <div class="panel" style="margin-bottom:18px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <input type="text" id="pl-url" placeholder="URL de YouTube (https://youtu.be/…)" style="flex:1;min-width:200px;padding:9px 12px;background:var(--bg-dark);border:1px solid var(--copper);color:var(--text);border-radius:5px;font-family:var(--font-b)"/>
+          <input type="text" id="pl-title" placeholder="Título" style="flex:1;min-width:140px;padding:9px 12px;background:var(--bg-dark);border:1px solid var(--copper);color:var(--text);border-radius:5px;font-family:var(--font-b)"/>
+          <button class="btn btn-primary" id="pl-add">＋ Añadir</button>
+        </div>
+        <div id="pl-list"></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid rgba(176,107,32,.3)">
+          <button class="btn" id="pl-prev">⏮</button>
+          <button class="btn btn-primary" id="pl-play">▶ Play</button>
+          <button class="btn" id="pl-next">⏭</button>
+          <label class="check-row" style="font-family:var(--font-u);font-size:.8rem;color:var(--text-m)">
+            <input type="checkbox" id="pl-shuffle"/> Aleatorio
+          </label>
+          <label class="check-row" style="font-family:var(--font-u);font-size:.8rem;color:var(--text-m)">
+            <input type="checkbox" id="pl-loop" checked/> Bucle
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+            <span style="font-family:var(--font-u);font-size:.75rem;color:var(--text-m)">Vol</span>
+            <input type="range" id="pl-vol" min="0" max="100" value="50" style="accent-color:var(--copper);width:100px"/>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ PANEL: INFO PAGE ════ -->
+    <section id="panel-info" class="admin-section hidden">
+      <div class="section-head"><h2>Página de Información</h2></div>
+      <div class="panel">
+        <p style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);margin-bottom:12px;letter-spacing:1px">Este contenido se mostrará a los usuarios en su sección "Información". Puedes usar HTML básico.</p>
+        <textarea id="info-editor" style="width:100%;min-height:280px;padding:14px;background:var(--bg-dark);border:1px solid var(--copper);color:var(--text);border-radius:6px;font-family:var(--font-b);font-size:.95rem;resize:vertical" placeholder="&lt;h2&gt;Bienvenidos&lt;/h2&gt;&lt;p&gt;Escribe aquí el contenido informativo…&lt;/p&gt;"></textarea>
+        <div style="margin-top:10px;display:flex;gap:10px">
+          <button class="btn btn-primary" id="btn-save-info">💾 Guardar</button>
+          <button class="btn btn-ghost" id="btn-preview-info">👁 Vista previa</button>
+        </div>
+        <div id="info-preview" class="hidden" style="margin-top:16px;padding:16px;background:var(--bg-dark);border:1px solid rgba(176,107,32,.3);border-radius:6px;color:var(--text);font-family:var(--font-b)"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/wheel.js"></script>
+<script src="/js/music.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mudae — Acceso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:wght@400;600&family=IM+Fell+English+SC&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/css/shared.css"/>
+<style>
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.auth-box{position:relative;background:var(--bg-panel);border:1px solid var(--copper);border-radius:16px;padding:40px 36px;width:min(440px,96vw);box-shadow:var(--glow-cu)}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo .gear{font-size:2.4rem;color:var(--copper);display:block;animation:gspin 10s linear infinite}
+.auth-logo h1{font-family:var(--font-d);font-size:1.5rem;background:linear-gradient(180deg,var(--gold-l),var(--copper-l));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:3px;margin-top:8px}
+.auth-logo p{font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:3px;margin-top:4px}
+.tab-btns{display:flex;gap:0;margin-bottom:24px;border-radius:8px;overflow:hidden;border:1px solid rgba(176,107,32,.4)}
+.tab-btn{flex:1;padding:10px;background:transparent;border:none;color:var(--text-m);font-family:var(--font-u);font-size:.82rem;letter-spacing:1px;cursor:pointer;transition:all .2s}
+.tab-btn.active{background:var(--copper);color:var(--bg-deep)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+.error-msg{background:rgba(229,57,53,.15);border:1px solid #c62828;border-radius:6px;padding:8px 14px;color:#ef9a9a;font-family:var(--font-u);font-size:.82rem;margin-bottom:12px}
+.success-msg{background:rgba(76,175,80,.15);border:1px solid #388e3c;border-radius:6px;padding:8px 14px;color:#a5d6a7;font-family:var(--font-u);font-size:.82rem;margin-bottom:12px}
+.btn-close-auth{position:absolute;top:12px;right:14px;background:transparent;border:1px solid var(--copper);color:var(--copper);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.btn-close-auth:hover{background:var(--rust);border-color:var(--rust);color:#fff}
+</style>
+</head>
+<body>
+<div id="steam-bg">
+  <div class="gear-bg g1">⚙</div><div class="gear-bg g2">⚙</div><div class="gear-bg g3">⚙</div>
+  <canvas id="particles-canvas"></canvas>
+</div>
+
+<div class="auth-box">
+  <button class="btn-close-auth" onclick="window.location.href='/'" title="Volver">✕</button>
+  <div class="auth-logo">
+    <span class="gear">⚙</span>
+    <h1>MUDAE</h1>
+    <p>WHEEL OF FATE</p>
+  </div>
+
+  <div class="tab-btns">
+    <button class="tab-btn active" data-tab="login">Iniciar Sesión</button>
+    <button class="tab-btn" data-tab="register">Crear Cuenta</button>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="tab-pane active" id="tab-login">
+    <div id="login-error" class="error-msg hidden"></div>
+    <div class="form-group">
+      <label>Nombre de usuario</label>
+      <input type="text" id="login-user" placeholder="tu_usuario" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:6px" id="btn-login">
+      🔑 Entrar
+    </button>
+  </div>
+
+  <!-- REGISTER -->
+  <div class="tab-pane" id="tab-register">
+    <div id="reg-error" class="error-msg hidden"></div>
+    <div id="reg-success" class="success-msg hidden"></div>
+    <div class="form-group">
+      <label>Nombre de usuario</label>
+      <input type="text" id="reg-user" placeholder="tu_usuario" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="reg-pass" placeholder="Mínimo 4 caracteres"/>
+    </div>
+    <div class="form-group">
+      <label>Confirmar contraseña</label>
+      <input type="password" id="reg-pass2" placeholder="Repite la contraseña"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:6px" id="btn-register">
+      ✨ Crear cuenta
+    </button>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+<script src="/js/api.js"></script>
+<script>
+// Redirige si ya está logueado
+if (API.isLoggedIn()) window.location.href = API.isAdmin() ? '/admin.html' : '/user.html';
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn,.tab-pane').forEach(e => e.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// Login
+document.getElementById('btn-login').addEventListener('click', async () => {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  errEl.classList.add('hidden');
+  if (!username || !password) { errEl.textContent = 'Rellena todos los campos'; errEl.classList.remove('hidden'); return; }
+  try {
+    const data = await API.post('/login', { username, password });
+    API.setSession(data.token, data.user);
+    window.location.href = data.user.role === 'admin' ? '/admin.html' : '/user.html';
+  } catch (e) {
+    errEl.textContent = e.message; errEl.classList.remove('hidden');
+  }
+});
+
+document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btn-login').click(); });
+
+// Register
+document.getElementById('btn-register').addEventListener('click', async () => {
+  const username = document.getElementById('reg-user').value.trim();
+  const pass  = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
+  const errEl = document.getElementById('reg-error');
+  const sucEl = document.getElementById('reg-success');
+  errEl.classList.add('hidden'); sucEl.classList.add('hidden');
+  if (!username || !pass || !pass2) { errEl.textContent = 'Rellena todos los campos'; errEl.classList.remove('hidden'); return; }
+  if (pass !== pass2) { errEl.textContent = 'Las contraseñas no coinciden'; errEl.classList.remove('hidden'); return; }
+  try {
+    const data = await API.post('/register', { username, password: pass });
+    API.setSession(data.token, data.user);
+    sucEl.textContent = '¡Cuenta creada! Redirigiendo…'; sucEl.classList.remove('hidden');
+    setTimeout(() => window.location.href = '/user.html', 1200);
+  } catch (e) {
+    errEl.textContent = e.message; errEl.classList.remove('hidden');
+  }
+});
+
+// Particles
+(function(){
+  const c = document.getElementById('particles-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  let W, H, P = [];
+  function resize(){ W = c.width = innerWidth; H = c.height = innerHeight; }
+  resize(); window.addEventListener('resize', resize);
+  for (let i=0;i<40;i++) P.push({x:Math.random()*2000,y:Math.random()*2000,r:Math.random()*2+.5,s:Math.random()*.3+.05,d:(Math.random()-.5)*.15,a:Math.random()*.3+.05});
+  function frame(){ ctx.clearRect(0,0,W,H); P.forEach(p=>{ p.y-=p.s; p.x+=p.d; if(p.y<-5){p.y=H+5;p.x=Math.random()*W;} ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(180,130,60,${p.a})`;ctx.fill(); }); requestAnimationFrame(frame); }
+  frame();
+})();
+</script>
+</body>
+</html>

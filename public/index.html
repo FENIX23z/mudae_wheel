@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mudae — Wheel of Fate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:wght@400;600&family=IM+Fell+English+SC&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/css/shared.css"/>
+<link rel="stylesheet" href="/css/index.css"/>
+</head>
+<body>
+<div id="steam-bg">
+  <div class="gear-bg g1">⚙</div><div class="gear-bg g2">⚙</div><div class="gear-bg g3">⚙</div>
+  <canvas id="particles-canvas"></canvas>
+</div>
+
+<!-- YouTube iframe oculto -->
+<div style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1">
+  <iframe id="yt-frame" width="1" height="1" frameborder="0" allow="autoplay;encrypted-media" allowfullscreen></iframe>
+</div>
+
+<!-- MÚSICA -->
+<div id="music-bar">
+  <button id="music-prev" class="music-btn">⏮</button>
+  <button id="music-toggle" class="music-btn">▶</button>
+  <button id="music-next" class="music-btn">⏭</button>
+  <span id="music-title">♪ Sin música</span>
+  <input type="range" id="music-vol" min="0" max="100" value="50"/>
+  <span id="vol-icon">🔊</span>
+</div>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="header-gear">⚙</div>
+    <div class="logo">MUDAE<span>WHEEL OF FATE</span></div>
+    <div class="header-gear rev">⚙</div>
+  </div>
+  <nav class="header-nav" id="header-nav">
+    <!-- Se rellena por JS -->
+  </nav>
+</header>
+
+<!-- GRID RULETAS -->
+<main style="position:relative;z-index:5;padding:36px 36px 80px;max-width:1200px;margin:0 auto">
+  <div class="section-label">✦ Elige tu Destino ✦</div>
+  <div id="roulettes-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px"></div>
+</main>
+
+<!-- MODAL RULETA -->
+<div id="roulette-overlay" class="modal-overlay hidden">
+  <div id="roulette-modal" style="width:min(960px,97vw);max-height:95vh;overflow:hidden;display:flex;background:var(--bg-panel);border:1px solid var(--copper);border-radius:14px;box-shadow:var(--glow-cu);animation:modal-in .35s cubic-bezier(.34,1.56,.64,1)">
+    <button class="modal-close" id="roulette-close">✕</button>
+
+    <!-- Columna rueda -->
+    <div id="modal-wheel-col" style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;border-right:1px solid rgba(176,107,32,.3)">
+      <div style="position:relative;width:clamp(270px,42vw,480px);height:clamp(270px,42vw,480px)">
+        <canvas id="wheel-canvas" width="600" height="600" style="width:100%;height:100%;border-radius:50%;box-shadow:0 0 28px rgba(176,107,32,.5);display:block"></canvas>
+        <div id="wheel-pointer" style="position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:30px;color:var(--gold-l);filter:drop-shadow(0 2px 8px rgba(201,162,39,.9));animation:ptr-pulse 1.5s ease-in-out infinite">▼</div>
+        <div id="wheel-gear" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:2rem;color:var(--copper);animation:gspin 6s linear infinite;pointer-events:none">⚙</div>
+      </div>
+    </div>
+
+    <!-- Columna info -->
+    <div id="modal-info-col" style="flex:1;display:flex;flex-direction:column;padding:28px 26px;overflow-y:auto;min-width:0">
+      <div id="roulette-breadcrumb" style="font-family:var(--font-u);font-size:.72rem;color:var(--text-d);letter-spacing:2px;margin-bottom:6px"></div>
+      <h2 id="roulette-title" style="font-family:var(--font-d);font-size:1.4rem;color:var(--gold-l);letter-spacing:2px;margin-bottom:8px"></h2>
+      <div id="roulette-badge" style="margin-bottom:16px"></div>
+      <div style="flex:1"></div>
+
+      <!-- Sin sesión -->
+      <div id="no-session-msg" class="hidden" style="text-align:center;padding:20px;background:var(--bg-dark);border:1px solid rgba(176,107,32,.3);border-radius:8px;margin-bottom:12px">
+        <p style="font-family:var(--font-u);color:var(--text-m);margin-bottom:10px">Debes iniciar sesión para girar</p>
+        <a href="/login.html" class="btn btn-primary">🔑 Iniciar Sesión</a>
+      </div>
+
+      <!-- Sin tickets -->
+      <div id="no-ticket-msg" class="hidden" style="text-align:center;padding:16px;background:rgba(229,57,53,.1);border:1px solid #c62828;border-radius:8px;margin-bottom:12px;font-family:var(--font-u);font-size:.85rem;color:#ef9a9a"></div>
+
+      <!-- Botón girar -->
+      <button id="spin-btn" class="spin-button hidden">
+        <span>🎟</span><span id="spin-btn-text">Gastar Ticket</span>
+      </button>
+
+      <!-- Fortune input -->
+      <div id="fortune-area" class="hidden" style="text-align:center;padding:14px;background:var(--bg-dark);border:1px solid var(--copper);border-radius:8px;margin-bottom:10px">
+        <label style="font-family:var(--font-u);font-size:.85rem;color:var(--text-m);display:block;margin-bottom:10px">Número máximo de PJ:</label>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px">
+          <button class="btn" id="num-minus" style="width:36px;height:36px;padding:0;font-size:1.2rem">−</button>
+          <input type="number" id="fortune-max" min="2" max="999" value="10" style="width:80px;text-align:center;padding:6px;background:var(--bg-dark);border:1px solid var(--copper);color:var(--text);border-radius:5px;font-size:1.1rem"/>
+          <button class="btn" id="num-plus" style="width:36px;height:36px;padding:0;font-size:1.2rem">+</button>
+        </div>
+        <button id="fortune-confirm" class="btn btn-primary" style="width:100%">🎲 Girar</button>
+      </div>
+
+      <!-- Resultado -->
+      <div id="result-area" class="hidden">
+        <div id="result-card" style="background:var(--bg-dark);border:1px solid var(--copper);border-radius:8px;overflow:hidden;margin-bottom:12px;animation:modal-in .5s cubic-bezier(.34,1.56,.64,1)">
+          <div id="result-rarity-bar" style="height:5px"></div>
+          <img id="result-img" src="" alt="" style="width:100%;max-height:180px;object-fit:cover;display:none"/>
+          <div style="padding:14px 16px">
+            <div id="result-name" style="font-family:var(--font-d);font-size:1.05rem;color:var(--gold-l);letter-spacing:2px;margin-bottom:4px"></div>
+            <div id="result-desc" style="font-size:.9rem;color:var(--text-m)"></div>
+            <div id="result-number" style="font-family:var(--font-d);font-size:2rem;color:var(--copper-glow);text-align:center;padding:14px 0;letter-spacing:4px"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="result-next" class="btn btn-primary hidden" style="flex:1">Continuar ⟶</button>
+          <button id="result-restart" class="btn btn-ghost" style="flex:1">↺ Inicio</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/wheel.js"></script>
+<script src="/js/music.js"></script>
+<script src="/js/index.js"></script>
+</body>
+</html>
