@@ -13,6 +13,18 @@
   <div class="gear-bg g1">⚙</div><div class="gear-bg g2">⚙</div><div class="gear-bg g3">⚙</div>
   <canvas id="particles-canvas"></canvas>
 </div>
+<div id="admin-guard" class="admin-guard hidden">
+  <div class="admin-guard-card">
+    <div class="admin-guard-icon">⚙</div>
+    <h2>Acceso restringido</h2>
+    <p>Inicia sesión con una cuenta de administrador para gestionar ruletas, usuarios, tickets y música.</p>
+    <div class="admin-guard-actions">
+      <a href="/login.html" class="btn btn-primary">🔑 Iniciar sesión</a>
+      <a href="/" class="btn btn-ghost">🏠 Volver al sitio</a>
+    </div>
+  </div>
+</div>
+<div id="admin-status" class="admin-status hidden"></div>
 <div style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1">
   <iframe id="yt-frame" width="1" height="1" frameborder="0" allow="autoplay;encrypted-media" allowfullscreen></iframe>
 </div>
@@ -25,7 +37,7 @@
   <span id="vol-icon">🔊</span>
 </div>
 
-<div class="admin-layout">
+<div id="admin-layout" class="admin-layout">
   <!-- SIDEBAR -->
   <aside class="admin-sidebar">
     <div class="sidebar-logo">

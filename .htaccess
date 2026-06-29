@@ -1,0 +1,14 @@
+RewriteEngine On
+DirectoryIndex index.html
+
+# API PHP
+RewriteRule ^api/?$ public/api.php?route=api [QSA,L]
+RewriteRule ^api/(.*)$ public/api.php?route=api/$1 [QSA,L]
+
+# Página principal en la raíz
+RewriteRule ^$ index.html [L]
+
+# Reescribe todo lo demás a la carpeta public
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ public/$1 [L]

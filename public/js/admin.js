@@ -1,12 +1,43 @@
 // public/js/admin.js — Panel de administración completo
 'use strict';
 
-if (!requireAdmin()) throw new Error('redirect');
-
-/* ── Helpers ─────────────────────────────────────── */
 const $  = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const genId = () => 'r' + Math.random().toString(36).slice(2, 10);
+const adminGuard = $('#admin-guard');
+const adminStatus = $('#admin-status');
+
+function showAdminGuard(message = 'Inicia sesión con una cuenta de administrador para gestionar la web.') {
+  if (!adminGuard) return;
+  const layout = $('#admin-layout');
+  const title = adminGuard.querySelector('h2');
+  const desc = adminGuard.querySelector('p');
+  if (layout) layout.classList.add('hidden');
+  if (title) title.textContent = 'Acceso restringido';
+  if (desc) desc.textContent = message;
+  adminGuard.classList.remove('hidden');
+}
+
+function showAdminStatus(message, kind = 'info') {
+  if (!adminStatus) return;
+  adminStatus.textContent = message;
+  adminStatus.className = `admin-status ${kind}`;
+  adminStatus.classList.remove('hidden');
+  clearTimeout(adminStatus._tid);
+  if (kind !== 'error') {
+    adminStatus._tid = setTimeout(() => adminStatus.classList.add('hidden'), 3500);
+  }
+}
+
+if (!API.isLoggedIn()) {
+  showAdminGuard();
+} else if (!API.isAdmin()) {
+  showAdminGuard('Tu cuenta no tiene permisos de administrador.');
+} else {
+  initAdmin();
+}
+
+/* ── Helpers ─────────────────────────────────────── */
 const toast = (msg, dur = 2800) => {
   const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden');
   clearTimeout(t._tid); t._tid = setTimeout(() => t.classList.add('hidden'), dur);
@@ -60,8 +91,14 @@ let editingId    = null;
 let optionsData  = [];
 
 async function loadRoulettes() {
-  allRoulettes = await API.get('/roulettes');
-  renderRouletteList();
+  try {
+    allRoulettes = await API.get('/roulettes');
+    renderRouletteList();
+  } catch (e) {
+    showAdminStatus(`No se pudieron cargar las ruletas: ${e.message}`, 'error');
+    allRoulettes = [];
+    renderRouletteList();
+  }
 }
 
 function renderRouletteList() {
@@ -272,9 +309,16 @@ $('#ed-delete').addEventListener('click', async () => {
 let allUsers = [];
 
 async function loadUsers() {
-  allUsers = await API.get('/users');
-  renderUserList();
-  fillUserSelects();
+  try {
+    allUsers = await API.get('/users');
+    renderUserList();
+    fillUserSelects();
+  } catch (e) {
+    showAdminStatus(`No se pudieron cargar los usuarios: ${e.message}`, 'error');
+    allUsers = [];
+    renderUserList();
+    fillUserSelects();
+  }
 }
 
 function renderUserList() {
@@ -388,9 +432,15 @@ function renderTicketRows(uid, tickets) {
    PLAYLIST (admin)
    ══════════════════════════════════════════════════ */
 async function loadPlaylist() {
-  const tracks = await API.get('/playlist');
-  MusicPlayer.playlist = tracks;
-  renderAdminPlaylist(tracks);
+  try {
+    const tracks = await API.get('/playlist');
+    MusicPlayer.playlist = tracks;
+    renderAdminPlaylist(tracks);
+  } catch (e) {
+    showAdminStatus(`No se pudo cargar la playlist: ${e.message}`, 'error');
+    MusicPlayer.playlist = [];
+    renderAdminPlaylist([]);
+  }
 }
 
 function renderAdminPlaylist(tracks) {
@@ -442,8 +492,13 @@ $('#pl-vol').addEventListener('input', e => { MusicPlayer.setVolume(+e.target.va
    INFO PAGE
    ══════════════════════════════════════════════════ */
 async function loadInfoPage() {
-  const settings = await API.get('/settings');
-  $('#info-editor').value = settings.info_page || '';
+  try {
+    const settings = await API.get('/settings');
+    $('#info-editor').value = settings.info_page || '';
+  } catch (e) {
+    showAdminStatus(`No se pudo cargar la información: ${e.message}`, 'error');
+    $('#info-editor').value = '';
+  }
 }
 
 $('#btn-save-info').addEventListener('click', async () => {
@@ -464,10 +519,17 @@ $('#btn-preview-info').addEventListener('click', () => {
 /* ══════════════════════════════════════════════════
    INIT
    ══════════════════════════════════════════════════ */
-(async () => {
-  await loadRoulettes();
-  await loadUsers();
-  await loadPlaylist();
-  await loadInfoPage();
-  await MusicPlayer.init();
-})();
+async function initAdmin() {
+  try {
+    await Promise.allSettled([
+      loadRoulettes(),
+      loadUsers(),
+      loadPlaylist(),
+      loadInfoPage(),
+    ]);
+    await MusicPlayer.init();
+    showAdminStatus('Panel de administración listo', 'info');
+  } catch (e) {
+    showAdminStatus(`No se pudo inicializar el panel: ${e.message}`, 'error');
+  }
+}

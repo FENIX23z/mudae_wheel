@@ -1,0 +1,4 @@
+/* Estilos específicos para la página principal */
+main{position:relative;z-index:5;padding:36px 36px 80px;max-width:1200px;margin:0 auto}
+#roulettes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
+@media (max-width: 700px){main{padding:24px 16px 90px}}

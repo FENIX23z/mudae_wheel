@@ -47,8 +47,11 @@ function requireLogin(redirectTo = '/login.html') {
   if (!API.isLoggedIn()) { window.location.href = redirectTo; return false; }
   return true;
 }
-function requireAdmin() {
+function requireAdmin(redirectTo = null) {
   if (!requireLogin()) return false;
-  if (!API.isAdmin()) { window.location.href = '/user.html'; return false; }
+  if (!API.isAdmin()) {
+    if (redirectTo) window.location.href = redirectTo;
+    return false;
+  }
   return true;
 }
