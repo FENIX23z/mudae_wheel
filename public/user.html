@@ -191,6 +191,8 @@ function renderCraft() {
     card.querySelector('button')?.addEventListener('click', async () => {
       try {
         await API.post('/tickets/craft', { from_rarity_id: from });
+        // Reproducir sonido de crafteo
+        playCraftSound();
         toast('¡Crafteo exitoso! ✨');
         await loadTickets();
       } catch(e) { toast(e.message); }
@@ -199,6 +201,17 @@ function renderCraft() {
   }
   if (!grid.children.length) {
     grid.innerHTML = '<div class="empty"><span class="empty-icon">⚗️</span>Necesitas tickets para craftear.</div>';
+  }
+}
+
+// Función para reproducir sonido de crafteo
+function playCraftSound() {
+  try {
+    const audio = new Audio('https://files.catbox.moe/z94cit.mp3');
+    audio.volume = 0.7;
+    audio.play().catch(e => console.log('[Craft Sound] Error al reproducir:', e));
+  } catch(e) {
+    console.log('[Craft Sound] Error:', e);
   }
 }
 

@@ -54,7 +54,7 @@ const toast = (msg, dur = 2800) => {
   clearTimeout(t._tid); t._tid = setTimeout(() => t.classList.add('hidden'), dur);
 };
 
-const RARITIES = [
+const RARITY_OPTIONS = [
   { id:1, name:'Común',      color:'#9a9a9a' },
   { id:2, name:'Inusual',    color:'#4caf50' },
   { id:3, name:'Raro',       color:'#2196f3' },
@@ -66,7 +66,7 @@ const RARITIES = [
 // Rellena select de rareza
 function fillRaritySelect(selId, selectedId = 1) {
   const sel = $(selId);
-  sel.innerHTML = RARITIES.map(r =>
+  sel.innerHTML = RARITY_OPTIONS.map(r =>
     `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}</option>`
   ).join('');
 }
