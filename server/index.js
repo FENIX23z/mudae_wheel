@@ -245,31 +245,100 @@ app.get('/api/roulettes', async (_req, res) => {
       WHERE r.is_active=1 ORDER BY r.sort_order, r.created_at`);
     const [options] = await pool.query(
       'SELECT * FROM roulette_options ORDER BY sort_order');
-    const result = roulettes.map(r => ({
-      ...r,
-      adaptSize: !!r.adapt_size,
-      img: r.image_url || '',
-      desc: r.description || '',
-      options: options.filter(o => o.roulette_id === r.id).map(o => ({
+    const [users] = await pool.query('SELECT id, username FROM users ORDER BY id');
+    const result = roulettes.map(r => {
+      let rouletteOptions = options.filter(o => o.roulette_id === r.id).map(o => ({
         id: o.id, name: o.name||'', desc: o.description||'',
         img: o.image_url||'', prob: parseFloat(o.probability)||0,
         childRouletteId: o.child_roulette_id||'',
-      })),
-    }));
+        givesTicketRarityId: o.gives_ticket_rarity_id ? Number(o.gives_ticket_rarity_id) : null,
+      }));
+      if (r.type === 'users') {
+        rouletteOptions = users.map(u => ({
+          id: `user-${u.id}`,
+          name: u.username,
+          desc: `Usuario #${u.id}`,
+          img: '',
+          prob: 1,
+          childRouletteId: '',
+          givesTicketRarityId: null,
+        }));
+      }
+      return {
+        ...r,
+        adaptSize: !!r.adapt_size,
+        img: r.image_url || '',
+        desc: r.description || '',
+        spin_mode: r.spin_mode || 'normal',
+        free_spin_cooldown_seconds: Number(r.free_spin_cooldown_seconds || 0),
+        options: rouletteOptions,
+      };
+    });
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/api/roulette/free-spin-status/:rouletteId', auth, async (req, res) => {
+  try {
+    const [[roulette]] = await pool.query(
+      'SELECT id, spin_mode, free_spin_cooldown_seconds FROM roulettes WHERE id=?',
+      [req.params.rouletteId]);
+    if (!roulette || roulette.spin_mode !== 'free') {
+      return res.json({ enabled: false, remaining_seconds: 0 });
+    }
+    const cooldown = Number(roulette.free_spin_cooldown_seconds || 0);
+    const [[state]] = await pool.query(
+      'SELECT last_used_at FROM roulette_free_spin_state WHERE user_id=? AND roulette_id=?',
+      [req.user.id, req.params.rouletteId]);
+    if (!state?.last_used_at) return res.json({ enabled: true, remaining_seconds: 0 });
+    const [[diffRow]] = await pool.query(
+      'SELECT TIMESTAMPDIFF(SECOND, ?, NOW()) AS diff',
+      [state.last_used_at]);
+    const diff = Number(diffRow?.diff || 0);
+    const remaining = Math.max(0, cooldown - diff);
+    res.json({ enabled: remaining <= 0, remaining_seconds: remaining });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/roulette/free-spin', auth, async (req, res) => {
+  const { roulette_id } = req.body;
+  try {
+    const [[roulette]] = await pool.query(
+      'SELECT id, spin_mode, free_spin_cooldown_seconds FROM roulettes WHERE id=?',
+      [roulette_id]);
+    if (!roulette || roulette.spin_mode !== 'free') {
+      return res.status(400).json({ error: 'Esta ruleta no tiene giro gratis' });
+    }
+    const cooldown = Number(roulette.free_spin_cooldown_seconds || 0);
+    const [[state]] = await pool.query(
+      'SELECT last_used_at FROM roulette_free_spin_state WHERE user_id=? AND roulette_id=?',
+      [req.user.id, roulette_id]);
+    if (state?.last_used_at) {
+      const [[diffRow]] = await pool.query(
+        'SELECT TIMESTAMPDIFF(SECOND, ?, NOW()) AS diff',
+        [state.last_used_at]);
+      const diff = Number(diffRow?.diff || 0);
+      if (diff < cooldown) {
+        return res.status(400).json({ error: 'Cooldown activo', remaining_seconds: Math.max(0, cooldown - diff) });
+      }
+    }
+    await pool.query(
+      'INSERT INTO roulette_free_spin_state (user_id, roulette_id, last_used_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE last_used_at=NOW()',
+      [req.user.id, roulette_id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/roulettes', auth, adminOnly, async (req, res) => {
-  const { id, name, type, rarity_id, desc, img, adaptSize, options=[] } = req.body;
+  const { id, name, type, rarity_id, desc, img, adaptSize, spin_mode, free_spin_cooldown_seconds, options=[] } = req.body;
   if (!name) return res.status(400).json({ error: 'Nombre requerido' });
   const rid = id || genId();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     await conn.query(
-      'INSERT INTO roulettes (id,name,description,image_url,type,rarity_id,adapt_size) VALUES (?,?,?,?,?,?,?)',
-      [rid, name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0]);
+      'INSERT INTO roulettes (id,name,description,image_url,type,rarity_id,adapt_size,spin_mode,free_spin_cooldown_seconds) VALUES (?,?,?,?,?,?,?,?,?)',
+      [rid, name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, spin_mode||'normal', Number(free_spin_cooldown_seconds||0)]);
     await _insertOptions(conn, rid, options);
     await conn.commit();
     res.json({ ok:true, id: rid });
@@ -283,8 +352,8 @@ app.put('/api/roulettes/:id', auth, adminOnly, async (req, res) => {
   try {
     await conn.beginTransaction();
     await conn.query(
-      'UPDATE roulettes SET name=?,description=?,image_url=?,type=?,rarity_id=?,adapt_size=? WHERE id=?',
-      [name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, req.params.id]);
+      'UPDATE roulettes SET name=?,description=?,image_url=?,type=?,rarity_id=?,adapt_size=?,spin_mode=?,free_spin_cooldown_seconds=? WHERE id=?',
+      [name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, spin_mode||'normal', Number(free_spin_cooldown_seconds||0), req.params.id]);
     await conn.query('DELETE FROM roulette_options WHERE roulette_id=?', [req.params.id]);
     await _insertOptions(conn, req.params.id, options);
     await conn.commit();
@@ -306,8 +375,8 @@ async function _insertOptions(conn, rouletteId, options) {
     const o = options[i];
     const oid = (o.id && o.id.startsWith('r')) ? o.id : genId();
     await conn.query(
-      'INSERT INTO roulette_options (id,roulette_id,name,description,image_url,probability,child_roulette_id,sort_order) VALUES (?,?,?,?,?,?,?,?)',
-      [oid, rouletteId, o.name||'', o.desc||'', o.img||'', o.prob||0, o.childRouletteId||null, i]);
+      'INSERT INTO roulette_options (id,roulette_id,name,description,image_url,probability,child_roulette_id,gives_ticket_rarity_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?)',
+      [oid, rouletteId, o.name||'', o.desc||'', o.img||'', o.prob||0, o.childRouletteId||null, o.givesTicketRarityId || null, i]);
   }
 }
 

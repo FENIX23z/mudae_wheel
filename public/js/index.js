@@ -12,6 +12,7 @@ let allRoulettes = [];
 let myTickets    = {};   // { rarity_id: qty }
 let session      = { stack: [] };
 let freeSpinsUsed = {}; // { rouletteId: true } — rastrea giros gratis usados por sesión
+let freeSpinCooldowns = {}; // { rouletteId: remainingSeconds }
 
 /* ── Header nav ───────────────────────────────────── */
 function renderNav() {
@@ -83,8 +84,8 @@ function renderGrid() {
         <div class="r-card-desc">${r.desc || ''}</div>
         <button class="spin-button" style="border-color:${rc};color:${rc};font-size:.82rem;padding:10px 12px;margin-top:2px"
           data-id="${r.id}">
-          🎟 Gastar Ticket · ${rl}
-          ${API.isLoggedIn() ? `<span style="margin-left:8px;font-size:.75rem;opacity:.8">(${qty})</span>` : ''}
+          ${r.spin_mode === 'free' ? '🎲 Giro Gratis · ' + rl : '🎟 Gastar Ticket · ' + rl}
+          ${API.isLoggedIn() && r.spin_mode !== 'free' ? `<span style="margin-left:8px;font-size:.75rem;opacity:.8">(${qty})</span>` : ''}
         </button>
       </div>`;
 
@@ -136,35 +137,54 @@ function showCurrentStep() {
   }
 }
 
-function _resolveSpinButton(r) {
+async function _resolveSpinButton(r) {
   const user = API.user();
   if (!user) {
     $('#no-session-msg').classList.remove('hidden');
     return;
   }
 
-  // Botón giro gratis (siempre disponible si no lo ha usado esta sesión)
   const freeBtn = $('#free-spin-btn');
   const freeBtnText = $('#free-spin-btn-text');
-  if (!freeSpinsUsed[r.id]) {
+  const spinBtn = $('#spin-btn');
+  const qty = myTickets[r.rarity_id] ?? 0;
+
+  if (r.spin_mode === 'free') {
+    spinBtn.classList.add('hidden');
+    try {
+      const status = await API.get(`/roulette/free-spin-status/${r.id}`);
+      const canFreeSpin = status.enabled && !freeSpinsUsed[r.id];
+      if (canFreeSpin) {
+        freeBtn.classList.remove('hidden');
+        freeBtnText.textContent = 'Girar Gratis';
+        freeBtn.disabled = false;
+      } else {
+        freeBtn.classList.add('hidden');
+        if (status.remaining_seconds > 0) {
+          freeBtnText.textContent = `Cooldown ${Math.ceil(status.remaining_seconds / 60)} min`;
+          freeBtn.classList.remove('hidden');
+          freeBtn.disabled = true;
+        }
+      }
+    } catch {
+      freeBtn.classList.add('hidden');
+    }
+  } else if (!freeSpinsUsed[r.id]) {
     freeBtn.classList.remove('hidden');
     freeBtnText.textContent = 'Girar Gratis (sin ticket)';
   } else {
     freeBtn.classList.add('hidden');
   }
 
-  // Botón giro normal (solo si tiene ticket)
-  const qty = myTickets[r.rarity_id] ?? 0;
   if (qty < 1) {
-    if (freeSpinsUsed[r.id]) {
-      // No tiene ticket ni giro gratis
+    if (freeSpinsUsed[r.id] || r.spin_mode === 'free') {
       const noEl = $('#no-ticket-msg');
       noEl.textContent = `No tienes tickets de rareza ${r.rarity_name || 'Común'}. ¡Consíguelos en tu perfil!`;
       noEl.classList.remove('hidden');
     }
     return;
   }
-  const spinBtn = $('#spin-btn');
+
   spinBtn.classList.remove('hidden');
   const rc = r.rarity_color || '#b06b20';
   spinBtn.style.borderColor = rc;
@@ -182,6 +202,11 @@ $('#spin-btn').addEventListener('click', async () => {
   const step = session.stack[session.stack.length - 1];
   const r    = allRoulettes.find(x => x.id === step.rouletteId);
   if (!r || WheelEngine.spinning) return;
+
+  if (r.spin_mode === 'free') {
+    toast('Esta ruleta solo se juega con giro gratis');
+    return;
+  }
 
   // Gasta ticket
   try {
@@ -203,11 +228,17 @@ $('#free-spin-btn').addEventListener('click', async () => {
   if (!r || WheelEngine.spinning) return;
   if (freeSpinsUsed[r.id]) { toast('Ya usaste tu giro gratis para esta ruleta'); return; }
 
-  // Marcar como usado
-  freeSpinsUsed[r.id] = true;
   const user = API.user();
   if (!user) { window.location.href = '/login.html'; return; }
 
+  try {
+    await API.post('/roulette/free-spin', { roulette_id: r.id });
+  } catch (e) {
+    toast(e.message);
+    return;
+  }
+
+  freeSpinsUsed[r.id] = true;
   $('#free-spin-btn').disabled = true;
   $('#spin-btn').classList.add('hidden');
   WheelEngine.spin(picked => {

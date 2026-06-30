@@ -69,16 +69,18 @@ CREATE TABLE IF NOT EXISTS `user_tickets` (
 
 -- ── Ruletas ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `roulettes` (
-  `id`          VARCHAR(20)  NOT NULL,
-  `name`        VARCHAR(120) NOT NULL,
-  `description` TEXT,
-  `image_url`   VARCHAR(512),
-  `type`        ENUM('normal','fortune') NOT NULL DEFAULT 'normal',
-  `rarity_id`   TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  `adapt_size`  TINYINT(1)   NOT NULL DEFAULT 0,
-  `sort_order`  SMALLINT     NOT NULL DEFAULT 0,
-  `is_active`   TINYINT(1)   NOT NULL DEFAULT 1,
-  `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `id`                      VARCHAR(20)  NOT NULL,
+  `name`                    VARCHAR(120) NOT NULL,
+  `description`             TEXT,
+  `image_url`               VARCHAR(512),
+  `type`                    VARCHAR(20)  NOT NULL DEFAULT 'normal',
+  `rarity_id`               TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `adapt_size`              TINYINT(1)   NOT NULL DEFAULT 0,
+  `spin_mode`               VARCHAR(20)  NOT NULL DEFAULT 'normal',
+  `free_spin_cooldown_seconds` INT UNSIGNED NOT NULL DEFAULT 0,
+  `sort_order`              SMALLINT     NOT NULL DEFAULT 0,
+  `is_active`               TINYINT(1)   NOT NULL DEFAULT 1,
+  `created_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_r_rarity` FOREIGN KEY (`rarity_id`) REFERENCES `rarities`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -102,6 +104,18 @@ CREATE TABLE IF NOT EXISTS `roulette_options` (
 
 -- Migración: añadir columna si no existe (para bases ya creadas)
 ALTER TABLE `roulette_options` ADD COLUMN IF NOT EXISTS `gives_ticket_rarity_id` TINYINT UNSIGNED DEFAULT NULL;
+ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `spin_mode` VARCHAR(20) NOT NULL DEFAULT 'normal';
+ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `free_spin_cooldown_seconds` INT UNSIGNED NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS `roulette_free_spin_state` (
+  `user_id`      INT UNSIGNED NOT NULL,
+  `roulette_id`  VARCHAR(20)  NOT NULL,
+  `last_used_at` DATETIME DEFAULT NULL,
+  PRIMARY KEY (`user_id`,`roulette_id`),
+  KEY `idx_rfs_roulette` (`roulette_id`),
+  CONSTRAINT `fk_rfs_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_rfs_roulette` FOREIGN KEY (`roulette_id`) REFERENCES `roulettes`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── Playlist ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `playlist_tracks` (

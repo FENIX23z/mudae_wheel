@@ -86,7 +86,17 @@
             <select id="ed-type">
               <option value="normal">Normal (opciones)</option>
               <option value="fortune">Fortuna (número aleatorio)</option>
+              <option value="users">Usuarios (todos los usuarios)</option>
             </select>
+          </div>
+          <div class="form-group"><label>Modo de tirada</label>
+            <select id="ed-spin-mode">
+              <option value="normal">Normal</option>
+              <option value="free">Gratis con cooldown</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Cooldown gratis (segundos)</label>
+            <input type="number" id="ed-free-cooldown" min="0" step="60" value="0" placeholder="3600 = 1 hora / 1814400 = 3 semanas"/>
           </div>
           <div class="form-group"><label>Rareza</label>
             <select id="ed-rarity"></select>

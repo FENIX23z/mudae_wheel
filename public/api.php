@@ -212,16 +212,23 @@ try {
             if ($method === 'GET' && count($segments) === 1) {
                 $roulettes = $pdo->query('SELECT r.*, ra.name AS rarity_name, ra.color AS rarity_color FROM roulettes r JOIN rarities ra ON ra.id=r.rarity_id WHERE r.is_active=1 ORDER BY r.sort_order, r.created_at')->fetchAll();
                 $options = $pdo->query('SELECT * FROM roulette_options ORDER BY sort_order')->fetchAll();
+                $users = $pdo->query('SELECT id, username FROM users ORDER BY id')->fetchAll();
                 $result = [];
                 foreach ($roulettes as $r) {
                     $opts = [];
-                    foreach ($options as $o) {
-                        if ((string)$o['roulette_id'] === (string)$r['id']) {
-                            $giveTicket = hasGivesTicketCol($pdo) && isset($o['gives_ticket_rarity_id']) ? ((int)$o['gives_ticket_rarity_id'] ?: null) : null;
-                            $opts[] = ['id' => $o['id'], 'name' => $o['name'] ?: '', 'desc' => $o['description'] ?: '', 'img' => $o['image_url'] ?: '', 'prob' => (float)$o['probability'], 'childRouletteId' => $o['child_roulette_id'] ?: '', 'givesTicketRarityId' => $giveTicket];
+                    if ((string)($r['type'] ?? '') === 'users') {
+                        foreach ($users as $u) {
+                            $opts[] = ['id' => 'user-' . $u['id'], 'name' => $u['username'], 'desc' => 'Usuario #' . $u['id'], 'img' => '', 'prob' => 1.0, 'childRouletteId' => '', 'givesTicketRarityId' => null];
+                        }
+                    } else {
+                        foreach ($options as $o) {
+                            if ((string)$o['roulette_id'] === (string)$r['id']) {
+                                $giveTicket = hasGivesTicketCol($pdo) && isset($o['gives_ticket_rarity_id']) ? ((int)$o['gives_ticket_rarity_id'] ?: null) : null;
+                                $opts[] = ['id' => $o['id'], 'name' => $o['name'] ?: '', 'desc' => $o['description'] ?: '', 'img' => $o['image_url'] ?: '', 'prob' => (float)$o['probability'], 'childRouletteId' => $o['child_roulette_id'] ?: '', 'givesTicketRarityId' => $giveTicket];
+                            }
                         }
                     }
-                    $result[] = ['id' => $r['id'], 'name' => $r['name'], 'desc' => $r['description'] ?: '', 'img' => $r['image_url'] ?: '', 'type' => $r['type'], 'rarity_id' => (int)$r['rarity_id'], 'rarity_name' => $r['rarity_name'], 'rarity_color' => $r['rarity_color'], 'adaptSize' => (bool)$r['adapt_size'], 'options' => $opts];
+                    $result[] = ['id' => $r['id'], 'name' => $r['name'], 'desc' => $r['description'] ?: '', 'img' => $r['image_url'] ?: '', 'type' => $r['type'], 'rarity_id' => (int)$r['rarity_id'], 'rarity_name' => $r['rarity_name'], 'rarity_color' => $r['rarity_color'], 'adaptSize' => (bool)$r['adapt_size'], 'spin_mode' => $r['spin_mode'] ?? 'normal', 'free_spin_cooldown_seconds' => (int)($r['free_spin_cooldown_seconds'] ?? 0), 'options' => $opts];
                 }
                 jsonOut($result);
             } elseif ($method === 'POST' && count($segments) === 1) {
@@ -230,7 +237,7 @@ try {
                 $rid = $data['id'] ?: 'r' . bin2hex(random_bytes(4));
                 $pdo->beginTransaction();
                 try {
-                    $pdo->prepare('INSERT INTO roulettes (id, name, description, image_url, type, rarity_id, adapt_size) VALUES (?, ?, ?, ?, ?, ?, ?)')->execute([$rid, $data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0]);
+                    $pdo->prepare('INSERT INTO roulettes (id, name, description, image_url, type, rarity_id, adapt_size, spin_mode, free_spin_cooldown_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$rid, $data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0)]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
                         if (hasGivesTicketCol($pdo)) {
@@ -249,7 +256,7 @@ try {
                 $rid = $segments[1];
                 $pdo->beginTransaction();
                 try {
-                    $pdo->prepare('UPDATE roulettes SET name=?, description=?, image_url=?, type=?, rarity_id=?, adapt_size=? WHERE id=?')->execute([$data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $rid]);
+                    $pdo->prepare('UPDATE roulettes SET name=?, description=?, image_url=?, type=?, rarity_id=?, adapt_size=?, spin_mode=?, free_spin_cooldown_seconds=? WHERE id=?')->execute([$data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0), $rid]);
                     $pdo->prepare('DELETE FROM roulette_options WHERE roulette_id=?')->execute([$rid]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
@@ -268,6 +275,56 @@ try {
                 $rid = $segments[1];
                 $pdo->prepare('UPDATE roulette_options SET child_roulette_id=NULL WHERE child_roulette_id=?')->execute([$rid]);
                 $pdo->prepare('DELETE FROM roulettes WHERE id=?')->execute([$rid]);
+                jsonOut(['ok' => true]);
+            } else {
+                jsonOut(['error' => 'Método no permitido'], 405);
+            }
+            break;
+
+        case 'roulette':
+            $user = requireAuth($pdo);
+            if ($method === 'GET' && count($segments) === 3 && $segments[1] === 'free-spin-status') {
+                $rouletteId = $segments[2];
+                $stmt = $pdo->prepare('SELECT id, spin_mode, free_spin_cooldown_seconds FROM roulettes WHERE id=? LIMIT 1');
+                $stmt->execute([$rouletteId]);
+                $roulette = $stmt->fetch();
+                if (!$roulette || ($roulette['spin_mode'] ?? 'normal') !== 'free') {
+                    jsonOut(['enabled' => false, 'remaining_seconds' => 0]);
+                }
+                $cooldown = (int)($roulette['free_spin_cooldown_seconds'] ?? 0);
+                $stmt = $pdo->prepare('SELECT last_used_at FROM roulette_free_spin_state WHERE user_id=? AND roulette_id=? LIMIT 1');
+                $stmt->execute([$user['id'], $rouletteId]);
+                $state = $stmt->fetch();
+                if (!$state || !$state['last_used_at']) {
+                    jsonOut(['enabled' => true, 'remaining_seconds' => 0]);
+                }
+                $stmt = $pdo->prepare('SELECT TIMESTAMPDIFF(SECOND, ?, NOW()) AS diff');
+                $stmt->execute([$state['last_used_at']]);
+                $diff = (int)($stmt->fetch()['diff'] ?? 0);
+                $remaining = max(0, $cooldown - $diff);
+                jsonOut(['enabled' => $remaining <= 0, 'remaining_seconds' => $remaining]);
+            } elseif ($method === 'POST' && count($segments) === 2 && $segments[1] === 'free-spin') {
+                $data = readJson();
+                $rouletteId = $data['roulette_id'] ?? '';
+                $stmt = $pdo->prepare('SELECT id, spin_mode, free_spin_cooldown_seconds FROM roulettes WHERE id=? LIMIT 1');
+                $stmt->execute([$rouletteId]);
+                $roulette = $stmt->fetch();
+                if (!$roulette || ($roulette['spin_mode'] ?? 'normal') !== 'free') {
+                    jsonOut(['error' => 'Esta ruleta no tiene giro gratis'], 400);
+                }
+                $cooldown = (int)($roulette['free_spin_cooldown_seconds'] ?? 0);
+                $stmt = $pdo->prepare('SELECT last_used_at FROM roulette_free_spin_state WHERE user_id=? AND roulette_id=? LIMIT 1');
+                $stmt->execute([$user['id'], $rouletteId]);
+                $state = $stmt->fetch();
+                if ($state && $state['last_used_at']) {
+                    $stmt = $pdo->prepare('SELECT TIMESTAMPDIFF(SECOND, ?, NOW()) AS diff');
+                    $stmt->execute([$state['last_used_at']]);
+                    $diff = (int)($stmt->fetch()['diff'] ?? 0);
+                    if ($diff < $cooldown) {
+                        jsonOut(['error' => 'Cooldown activo', 'remaining_seconds' => max(0, $cooldown - $diff)], 400);
+                    }
+                }
+                $pdo->prepare('INSERT INTO roulette_free_spin_state (user_id, roulette_id, last_used_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE last_used_at=NOW()')->execute([$user['id'], $rouletteId]);
                 jsonOut(['ok' => true]);
             } else {
                 jsonOut(['error' => 'Método no permitido'], 405);

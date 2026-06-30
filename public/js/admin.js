@@ -116,6 +116,8 @@ function setupAdminEventListeners() {
       desc:      $('#ed-desc').value.trim(),
       img:       $('#ed-img').value.trim(),
       adaptSize: $('#ed-adapt').checked,
+      spin_mode: $('#ed-spin-mode').value,
+      free_spin_cooldown_seconds: parseInt($('#ed-free-cooldown').value || '0', 10),
       options:   optionsData,
     };
 
@@ -280,6 +282,8 @@ function openRouletteEditor(id) {
   $('#ed-desc').value  = r?.desc || '';
   $('#ed-img').value   = r?.img  || '';
   $('#ed-adapt').checked = r?.adaptSize || false;
+  $('#ed-spin-mode').value = r?.spin_mode || 'normal';
+  $('#ed-free-cooldown').value = r?.free_spin_cooldown_seconds || 0;
   fillRaritySelect('#ed-rarity', r?.rarity_id || 1);
 
   // Opciones: inicializa probs automáticas si están todas en 0
@@ -422,7 +426,9 @@ $('#ed-save').addEventListener('click', async () => {
     desc:      $('#ed-desc').value.trim(),
     img:       $('#ed-img').value.trim(),
     adaptSize: $('#ed-adapt').checked,
-    options:   optionsData,
+    spin_mode: $('#ed-spin-mode').value,
+    free_spin_cooldown_seconds: parseInt($('#ed-free-cooldown').value || '0', 10),
+    options:   $('#ed-type').value === 'users' ? [] : $('#ed-type').value === 'users' ? [] : optionsData,
   };
 
   try {
