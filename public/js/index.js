@@ -169,15 +169,14 @@ async function _resolveSpinButton(r) {
     } catch {
       freeBtn.classList.add('hidden');
     }
-  } else if (!freeSpinsUsed[r.id]) {
-    freeBtn.classList.remove('hidden');
-    freeBtnText.textContent = 'Girar Gratis (sin ticket)';
   } else {
+    // spin_mode !== 'free', NO mostrar botón de giro gratis
     freeBtn.classList.add('hidden');
   }
 
   if (qty < 1) {
-    if (freeSpinsUsed[r.id] || r.spin_mode === 'free') {
+    // Only show "no tickets" message if it's NOT a free-spin roulette
+    if (r.spin_mode !== 'free') {
       const noEl = $('#no-ticket-msg');
       noEl.textContent = `No tienes tickets de rareza ${r.rarity_name || 'Común'}. ¡Consíguelos en tu perfil!`;
       noEl.classList.remove('hidden');

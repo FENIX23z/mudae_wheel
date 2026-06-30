@@ -118,7 +118,7 @@ function setupAdminEventListeners() {
       adaptSize: $('#ed-adapt').checked,
       spin_mode: $('#ed-spin-mode').value,
       free_spin_cooldown_seconds: parseInt($('#ed-free-cooldown').value || '0', 10),
-      options:   optionsData,
+      options:   $('#ed-type').value === 'users' ? [] : optionsData,
     };
 
     try {
@@ -294,6 +294,34 @@ function openRouletteEditor(id) {
   }
   refreshOptsList();
   id ? $('#ed-delete').classList.remove('hidden') : $('#ed-delete').classList.add('hidden');
+  
+  // Mostrar/ocultar sección de opciones según tipo
+  const edType = $('#ed-type');
+  const optsSection = $('#opts-section');
+  const typeMsg = $('#ed-type-msg');
+  
+  function updateTypeUI() {
+    if (edType.value === 'users') {
+      if (optsSection) optsSection.classList.add('hidden');
+      if (!typeMsg) {
+        const newMsg = document.createElement('div');
+        newMsg.id = 'ed-type-msg';
+        newMsg.style.cssText = 'background:rgba(76,175,80,.1);border:1px solid #4caf50;border-radius:6px;padding:12px;margin-bottom:14px;font-family:var(--font-u);font-size:.85rem;color:#4caf50';
+        newMsg.textContent = '✓ Ruleta de usuarios: Mostrará automáticamente todos los usuarios registrados. No añadas opciones.';
+        optsSection.insertAdjacentElement('beforebegin', newMsg);
+      } else {
+        typeMsg.classList.remove('hidden');
+      }
+    } else {
+      if (optsSection) optsSection.classList.remove('hidden');
+      if (typeMsg) typeMsg.classList.add('hidden');
+    }
+  }
+  
+  updateTypeUI();
+  edType.removeEventListener('change', updateTypeUI);
+  edType.addEventListener('change', updateTypeUI);
+  
   $('#roulette-editor').classList.remove('hidden');
 }
 
@@ -395,56 +423,7 @@ function refreshOptsList() {
   });
 }
 
-$('#btn-add-opt').addEventListener('click', () => {
-  // Distribuye automáticamente entre todas las opciones + nueva
-  const n = optionsData.length + 1;
-  const eq = ProbManager.equalDistrib(n);
-  const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '', givesTicketRarityId: null };
-  optionsData.push(newOpt);
-  optionsData.forEach((o, i) => { o.prob = eq[i]; });
-  refreshOptsList();
-  setTimeout(() => {
-    const items = $$('#opts-list details');
-    if (items.length) items[items.length - 1].open = true;
-  }, 20);
-});
-
-$('#ed-save').addEventListener('click', async () => {
-  const name = $('#ed-name').value.trim();
-  if (!name) { toast('El nombre es obligatorio'); return; }
-
-  // Normaliza probs a 100 antes de guardar
-  const rawProbs = optionsData.map(o => parseFloat(o.prob) || 0);
-  const normProbs = ProbManager.normalize(rawProbs);
-  optionsData.forEach((o, i) => { o.prob = normProbs[i]; });
-
-  const body = {
-    id: editingId || genId(),
-    name,
-    type:      $('#ed-type').value,
-    rarity_id: parseInt($('#ed-rarity').value),
-    desc:      $('#ed-desc').value.trim(),
-    img:       $('#ed-img').value.trim(),
-    adaptSize: $('#ed-adapt').checked,
-    spin_mode: $('#ed-spin-mode').value,
-    free_spin_cooldown_seconds: parseInt($('#ed-free-cooldown').value || '0', 10),
-    options:   $('#ed-type').value === 'users' ? [] : $('#ed-type').value === 'users' ? [] : optionsData,
-  };
-
-  try {
-    if (editingId) await API.put(`/roulettes/${editingId}`, body);
-    else           await API.post('/roulettes', body);
-    toast('Ruleta guardada ✓');
-    closeEditor();
-    await loadRoulettes();
-  } catch (e) { toast('Error: ' + e.message); }
-});
-
-$('#ed-delete').addEventListener('click', async () => {
-  if (!editingId) return;
-  await deleteRoulette(editingId);
-  closeEditor();
-});
+// Note: Event listeners for editor are in setupAdminEventListeners() function
 
 /* ══════════════════════════════════════════════════
    USUARIOS
