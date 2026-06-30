@@ -29,6 +29,18 @@ function showAdminStatus(message, kind = 'info') {
   }
 }
 
+function setupTarotTabs() {
+  $$('.tarot-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.tarot-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      $$('.tarot-tab-panel').forEach(panel => panel.classList.add('hidden'));
+      const panel = $(`#tarot-${btn.dataset.tab}-tab`);
+      if (panel) panel.classList.remove('hidden');
+    });
+  });
+}
+
 /* Función pública para reiniciar admin (llamada después de login) */
 window.checkAdminAccess = function() {
   const user = API.user();
@@ -62,6 +74,8 @@ const RARITY_OPTIONS = [
   { id:5, name:'Legendario', color:'#ffc107' },
   { id:6, name:'Mítico',     color:'#e53935' },
 ];
+let tarotDefs = [];
+let craftConfig = [];
 
 // Rellena select de rareza
 function fillRaritySelect(selId, selectedId = 1) {
@@ -93,11 +107,35 @@ function setupAdminEventListeners() {
   const btnNewRoulette = $('#btn-new-roulette');
   if (btnNewRoulette) btnNewRoulette.addEventListener('click', () => openRouletteEditor(null));
   
+  const btnNewCard = $('#btn-new-card');
+  if (btnNewCard) btnNewCard.addEventListener('click', () => openTarotEditor(null));
+  
   const editorClose = $('#editor-r-close');
   if (editorClose) editorClose.addEventListener('click', closeEditor);
   
   const edCancel = $('#ed-cancel');
   if (edCancel) edCancel.addEventListener('click', closeEditor);
+  
+  const editorCardClose = $('#editor-c-close');
+  if (editorCardClose) editorCardClose.addEventListener('click', closeTarotEditor);
+  
+  const edCardCancel = $('#ed-card-cancel');
+  if (edCardCancel) edCardCancel.addEventListener('click', closeTarotEditor);
+  
+  const edCardSave = $('#ed-card-save');
+  if (edCardSave) edCardSave.addEventListener('click', saveTarotCard);
+  
+  const edCardDelete = $('#ed-card-delete');
+  if (edCardDelete) edCardDelete.addEventListener('click', async () => {
+    if (!editingCardId) return;
+    if (!confirm('¿Eliminar esta carta de tarot?')) return;
+    await deleteTarotCard(editingCardId);
+  });
+
+  const btnSaveCraftCost = $('#btn-save-craft-cost');
+  if (btnSaveCraftCost) btnSaveCraftCost.addEventListener('click', saveCraftCost);
+  
+  setupTarotTabs();
   
   const edSave = $('#ed-save');
   if (edSave) edSave.addEventListener('click', async () => {
@@ -118,6 +156,7 @@ function setupAdminEventListeners() {
       adaptSize: $('#ed-adapt').checked,
       spin_mode: $('#ed-spin-mode').value,
       free_spin_cooldown_seconds: parseInt($('#ed-free-cooldown').value || '0', 10),
+      allow_ticket_spin: $('#ed-allow-ticket').checked,
       options:   $('#ed-type').value === 'users' ? [] : optionsData,
     };
 
@@ -147,7 +186,7 @@ function setupAdminEventListeners() {
   if (btnAddOpt) btnAddOpt.addEventListener('click', () => {
     const n = optionsData.length + 1;
     const eq = ProbManager.equalDistrib(n);
-    const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '', givesTicketRarityId: null };
+    const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '', givesTicketRarityId: null, givesCardId: null };
     optionsData.push(newOpt);
     optionsData.forEach((o, i) => { o.prob = eq[i]; });
     refreshOptsList();
@@ -254,7 +293,7 @@ function renderRouletteList() {
       <div class="list-item-bar" style="background:${r.rarity_color};box-shadow:0 0 6px ${r.rarity_color}66"></div>
       <div class="list-item-info">
         <div class="list-item-name">${r.name}</div>
-        <div class="list-item-meta">${r.rarity_name} · ${r.type} · ${r.options?.length || 0} opciones</div>
+        <div class="list-item-meta">${r.rarity_name} · ${r.type} · ${r.options?.length || 0} opciones${r.spin_mode==='free' ? ` · ${r.allow_ticket_spin !== false ? 'ticket habilitado' : 'solo gratis'}` : ''}</div>
       </div>
       <div class="list-item-actions">
         <button class="btn btn-sm" data-edit="${r.id}">✏</button>
@@ -315,10 +354,11 @@ function openRouletteEditor(id) {
   $('#ed-adapt').checked = r?.adaptSize || false;
   $('#ed-spin-mode').value = r?.spin_mode || 'normal';
   $('#ed-free-cooldown').value = r?.free_spin_cooldown_seconds || 0;
+  $('#ed-allow-ticket').checked = r?.allow_ticket_spin !== false;
   fillRaritySelect('#ed-rarity', r?.rarity_id || 1);
 
   // Opciones: inicializa probs automáticas si están todas en 0
-  optionsData = (r?.options || []).map(o => ({ ...o, givesTicketRarityId: o.givesTicketRarityId ?? null }));
+  optionsData = (r?.options || []).map(o => ({ ...o, givesTicketRarityId: o.givesTicketRarityId ?? null, givesCardId: o.givesCardId ?? null }));
   if (optionsData.length && optionsData.every(o => !o.prob)) {
     const eq = ProbManager.equalDistrib(optionsData.length);
     optionsData.forEach((o, i) => { o.prob = eq[i]; });
@@ -407,6 +447,13 @@ function refreshOptsList() {
             `<option value="${r.id}" ${opt.givesTicketRarityId == r.id ? 'selected' : ''}>${r.name} (${r.color})</option>`
           ).join('')}
         </select>
+        <label style="margin-top:10px">Da carta al ganar esta opción</label>
+        <select class="opt-give-card" data-idx="${i}" style="accent-color:var(--copper)">
+          <option value="">— No dar carta —</option>
+          ${tarotDefs.map(c =>
+            `<option value="${c.id}" ${opt.givesCardId == c.id ? 'selected' : ''}>${c.name}</option>`
+          ).join('')}
+        </select>
       </div>`;
 
     // Eventos
@@ -451,6 +498,9 @@ function refreshOptsList() {
     d.querySelector('.opt-give-ticket').addEventListener('change', e => {
       optionsData[i].givesTicketRarityId = e.target.value ? parseInt(e.target.value) : null;
     });
+    d.querySelector('.opt-give-card').addEventListener('change', e => {
+      optionsData[i].givesCardId = e.target.value ? parseInt(e.target.value) : null;
+    });
     list.appendChild(d);
   });
 }
@@ -461,6 +511,120 @@ function refreshOptsList() {
    USUARIOS
    ══════════════════════════════════════════════════ */
 let allUsers = [];
+
+async function loadTarotDefs() {
+  try {
+    tarotDefs = await API.get('/cards/defs');
+  } catch (e) {
+    tarotDefs = [];
+    showAdminStatus(`No se pudieron cargar las cartas: ${e.message}`, 'error');
+  }
+}
+
+async function loadTarotCards() {
+  try {
+    tarotCards = await API.get('/cards/defs');
+    tarotDefs = tarotCards;
+    renderTarotCardList();
+  } catch (e) {
+    tarotCards = [];
+    tarotDefs = [];
+    renderTarotCardList();
+    showAdminStatus(`No se pudieron cargar las cartas: ${e.message}`, 'error');
+  }
+}
+
+async function loadTarotUsageLogs() {
+  try {
+    const logs = await API.get('/cards/logs');
+    renderTarotLogList(logs);
+  } catch (e) {
+    const list = $('#tarot-log-list');
+    if (list) list.innerHTML = '<div class="empty"><span class="empty-icon">⚠</span>No se pudieron cargar los registros.</div>';
+    showAdminStatus(`No se pudieron cargar los registros de cartas: ${e.message}`, 'error');
+  }
+}
+
+function renderTarotLogList(logs) {
+  const list = $('#tarot-log-list');
+  list.innerHTML = '';
+  if (!logs.length) {
+    list.innerHTML = '<div class="empty"><span class="empty-icon">📜</span>Sin actividad reciente de cartas.</div>';
+    return;
+  }
+  logs.forEach(entry => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="list-item-info">
+        <div class="list-item-name">${entry.action.toUpperCase()} · ${entry.card_name}</div>
+        <div class="list-item-meta">Usuario: ${entry.target_username} · Actor: ${entry.actor_username || 'Sistema'} · ${new Date(entry.created_at).toLocaleString('es-ES')}</div>
+        <div style="margin-top:6px;font-size:.82rem;color:var(--text-m)">${entry.details || ''}</div>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+async function saveCraftCost() {
+  const rows = [...document.querySelectorAll('#tarot-craft-config-body tr')];
+  if (!rows.length) {
+    toast('No hay configuración de crafteo para guardar');
+    return;
+  }
+
+  const payload = {};
+  rows.forEach(row => {
+    const from = parseInt(row.dataset.from, 10);
+    const cost = Math.max(1, parseInt(row.querySelector('.craft-cost-input').value, 10) || 1);
+    const enabled = row.querySelector('.craft-enabled-checkbox').checked ? '1' : '0';
+    payload[`craft_cost_${from}`] = cost;
+    payload[`craft_enabled_${from}`] = enabled;
+  });
+
+  try {
+    await API.put('/settings', payload);
+    toast('Configuración de crafteo guardada ✓');
+    await loadAdminSettings();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+async function loadAdminSettings() {
+  try {
+    const settings = await API.get('/settings');
+    craftConfig = RARITY_OPTIONS.slice(0, 5).map((fromR, idx) => {
+      const from = idx + 1;
+      const to = from + 1;
+      return {
+        from,
+        to,
+        cost: Math.max(1, parseInt(settings[`craft_cost_${from}`], 10) || parseInt(settings.craft_cost || '', 10) || 9),
+        enabled: ['1', 'true', true].includes(settings[`craft_enabled_${from}`] ?? '1'),
+      };
+    });
+    renderCraftConfig();
+  } catch (e) {
+    craftConfig = RARITY_OPTIONS.slice(0, 5).map((fromR, idx) => ({ from: idx + 1, to: idx + 2, cost: 9, enabled: true }));
+    renderCraftConfig();
+    showAdminStatus(`No se pudieron cargar los ajustes: ${e.message}`, 'error');
+  }
+}
+
+function renderCraftConfig() {
+  const body = $('#tarot-craft-config-body');
+  if (!body) return;
+  body.innerHTML = craftConfig.map(cfg => {
+    const fromR = RARITY_OPTIONS.find(r => r.id === cfg.from);
+    const toR = RARITY_OPTIONS.find(r => r.id === cfg.to);
+    return `<tr data-from="${cfg.from}">
+      <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08)">${fromR?.name || cfg.from}</td>
+      <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08)">${toR?.name || cfg.to}</td>
+      <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08)"><input class="craft-cost-input adm-select" type="number" min="1" value="${cfg.cost}" style="width:80px"/></td>
+      <td style="padding:10px;border-bottom:1px solid rgba(255,255,255,.08);text-align:center"><input type="checkbox" class="craft-enabled-checkbox" ${cfg.enabled ? 'checked' : ''}/></td>
+    </tr>`;
+  }).join('');
+}
 
 async function loadUsers() {
   try {
@@ -475,6 +639,88 @@ async function loadUsers() {
   }
 }
 
+let tarotCards = [];
+let editingCardId = null;
+
+function renderTarotCardList() {
+  const list = $('#tarot-card-list');
+  list.innerHTML = '';
+  if (!tarotCards.length) {
+    list.innerHTML = '<div class="empty"><span class="empty-icon">🔮</span>No hay cartas de tarot registradas.</div>';
+    return;
+  }
+  tarotCards.forEach(card => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="list-item-bar" style="background:#8e44ad"></div>
+      <div class="list-item-info">
+        <div class="list-item-name">${card.name}</div>
+        <div class="list-item-meta">${card.description || 'Sin descripción'}</div>
+      </div>
+      <div class="list-item-actions">
+        <button class="btn btn-sm btn-ghost edit-card-btn" data-id="${card.id}">✏️</button>
+        <button class="btn btn-sm btn-danger delete-card-btn" data-id="${card.id}">🗑</button>
+      </div>`;
+    item.querySelector('.edit-card-btn').addEventListener('click', () => openTarotEditor(card));
+    item.querySelector('.delete-card-btn').addEventListener('click', async () => {
+      if (!confirm(`¿Eliminar carta "${card.name}"?`)) return;
+      try {
+        await API.del(`/cards/${card.id}`);
+        await loadTarotCards();
+        toast('Carta eliminada ✓');
+      } catch (e) { toast(e.message); }
+    });
+    list.appendChild(item);
+  });
+}
+
+function openTarotEditor(card = null) {
+  editingCardId = card ? card.id : null;
+  $('#editor-c-title').textContent = card ? `Editar carta: ${card.name}` : 'Nueva Carta de Tarot';
+  $('#ed-card-name').value = card?.name || '';
+  $('#ed-card-desc').value = card?.description || '';
+  $('#ed-card-img').value = card?.image_url || '';
+  $('#ed-card-delete').classList.toggle('hidden', !card);
+  $('#tarot-editor').classList.remove('hidden');
+}
+
+function closeTarotEditor() {
+  $('#tarot-editor').classList.add('hidden');
+  editingCardId = null;
+}
+
+async function saveTarotCard() {
+  const name = $('#ed-card-name').value.trim();
+  const description = $('#ed-card-desc').value.trim();
+  const image_url = $('#ed-card-img').value.trim();
+  if (!name) { toast('El nombre de la carta es obligatorio'); return; }
+  try {
+    if (editingCardId) {
+      await API.put(`/cards/${editingCardId}`, { name, description, image_url });
+      toast('Carta actualizada ✓');
+    } else {
+      await API.post('/cards', { name, description, image_url });
+      toast('Carta creada ✓');
+    }
+    closeTarotEditor();
+    await loadTarotCards();
+  } catch (e) { toast(e.message); }
+}
+
+async function deleteTarotCard(cardId) {
+  try {
+    await API.del(`/cards/${cardId}`);
+    toast('Carta eliminada ✓');
+    await loadTarotCards();
+  } catch (e) { toast(e.message); }
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('es-ES', { hour12: false });
+}
+
 function renderUserList() {
   const list = $('#users-list');
   $('#users-count').textContent = `${allUsers.length} usuario(s)`;
@@ -483,6 +729,7 @@ function renderUserList() {
   allUsers.forEach(u => {
     const row = document.createElement('div');
     row.className = 'user-row';
+    row.dataset.uid = u.id;
     const initial = u.username[0].toUpperCase();
     row.innerHTML = `
       <div class="user-avatar">${initial}</div>
@@ -497,6 +744,7 @@ function renderUserList() {
           <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
         </select>
         <button class="btn btn-sm btn-primary role-save-btn" data-uid="${u.id}">✔</button>
+        <button class="btn btn-sm btn-ghost user-details-btn" data-uid="${u.id}">▾ Detalles</button>
         <button class="btn btn-sm btn-danger del-user-btn" data-uid="${u.id}" data-name="${u.username}">🗑</button>
       </div>`;
 
@@ -516,8 +764,96 @@ function renderUserList() {
         await loadUsers();
       } catch (e) { toast(e.message); }
     });
+    row.querySelector('.user-details-btn').addEventListener('click', async () => {
+      let detail = row.nextElementSibling;
+      if (!detail || !detail.classList.contains('user-detail')) {
+        detail = document.createElement('div');
+        detail.className = 'user-detail hidden';
+        detail.innerHTML = '<div class="user-detail-inner"></div>';
+        row.insertAdjacentElement('afterend', detail);
+      }
+      if (detail.classList.contains('hidden')) {
+        await loadUserDetails(u.id, detail);
+        detail.classList.remove('hidden');
+        row.querySelector('.user-details-btn').textContent = '▴ Ocultar';
+      } else {
+        detail.classList.add('hidden');
+        row.querySelector('.user-details-btn').textContent = '▾ Detalles';
+      }
+    });
     list.appendChild(row);
   });
+}
+
+async function loadUserDetails(userId, detail) {
+  const inner = detail.querySelector('.user-detail-inner');
+  inner.innerHTML = '<div class="empty"><span class="empty-icon">⏳</span>Cargando estadística…</div>';
+  try {
+    const data = await API.get(`/users/${userId}/stats`);
+    const cards = data.card_inventory || [];
+    const spins = data.spin_history || [];
+    const usage = data.card_usage || [];
+
+    const cardsHtml = cards.length ? cards.map(c => `
+      <div class="user-card-row${c.expired ? ' expired' : ''}">
+        <div><strong>${c.name}</strong>${c.expired ? ' <span style="color:#ef9a9a">(expirada)</span>' : ''}</div>
+        <div style="font-size:.82rem;color:var(--text-m)">${c.description}</div>
+        <div style="font-size:.78rem;color:var(--text-m);margin-top:6px">Expira: ${c.expires_at ? formatDateTime(c.expires_at) : 'Nunca'}</div>
+      </div>
+    `).join('') : '<div class="empty"><span class="empty-icon">🃏</span>Sin cartas activas.</div>';
+
+    const spinsHtml = spins.length ? spins.map(s => `
+      <div class="user-stat-row">
+        <div>${formatDateTime(s.created_at)} · <strong>${s.roulette_name || 'Ruleta desconocida'}</strong></div>
+        <div style="font-size:.82rem;color:var(--text-m)">${s.option_name || (s.fortune_result !== null ? `Número ${s.fortune_result}` : 'Sin resultado')}</div>
+      </div>
+    `).join('') : '<div class="empty"><span class="empty-icon">🎡</span>No hay giros registrados.</div>';
+
+    const usageHtml = usage.length ? usage.map(u => `
+      <div class="user-stat-row">
+        <div>${formatDateTime(u.used_at)} · <strong>${u.card_name}</strong></div>
+        <div style="font-size:.82rem;color:var(--text-m)">${u.question}</div>
+      </div>
+    `).join('') : '<div class="empty"><span class="empty-icon">✍️</span>No hay usos de cartas.</div>';
+
+    const awardOptions = tarotDefs.length ? `<select id="award-card-${userId}" class="adm-select" style="margin-right:8px">${tarotDefs.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select>` : '<div style="color:var(--text-m);font-size:.82rem">No hay cartas cargadas.</div>';
+    inner.innerHTML = `
+      <div class="user-detail-grid">
+        <div class="user-detail-col">
+          <h4>Últimos 10 giros</h4>
+          <div class="user-detail-box">${spinsHtml}</div>
+        </div>
+        <div class="user-detail-col">
+          <h4>Inventario de cartas</h4>
+          <div class="user-detail-box">${cardsHtml}</div>
+          <h4>Uso de cartas</h4>
+          <div class="user-detail-box">${usageHtml}</div>
+          <div class="user-detail-box" style="margin-top:14px">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px"><strong>Entregar carta</strong></div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${awardOptions}<button class="btn btn-sm btn-primary" id="award-btn-${userId}">Entregar</button></div>
+          </div>
+        </div>
+      </div>`;
+
+    const awardButton = $('#award-btn-' + userId);
+    if (awardButton) {
+      awardButton.addEventListener('click', async () => {
+        const select = $('#award-card-' + userId);
+        if (!select) return;
+        const cardId = parseInt(select.value, 10);
+        if (!cardId) return toast('Selecciona una carta.');
+        try {
+          await API.post('/cards/award', { user_id: userId, card_id: cardId });
+          toast('Carta entregada ✓');
+          await loadUserDetails(userId, detail);
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+    }
+  } catch (e) {
+    inner.innerHTML = `<div class="empty" style="color:#ef9a9a"><span class="empty-icon">⚠</span>Error: ${e.message}</div>`;
+  }
 }
 
 /* ══════════════════════════════════════════════════
@@ -658,6 +994,10 @@ async function initAdmin() {
     
     // Cargar datos
     await Promise.allSettled([
+      loadTarotDefs(),
+      loadTarotCards(),
+      loadTarotUsageLogs(),
+      loadAdminSettings(),
       loadRoulettes(),
       loadUsers(),
       loadPlaylist(),

@@ -135,6 +135,126 @@ app.delete('/api/users/:id', auth, adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/api/users/:id/stats', auth, async (req, res) => {
+  try {
+    const targetId = req.params.id === 'me' ? req.user.id : parseInt(req.params.id, 10);
+    if (req.params.id !== 'me' && req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admins' });
+
+    const [spinRows] = await pool.query(
+      'SELECT sl.created_at, r.id AS roulette_id, r.name AS roulette_name, o.name AS option_name, o.description AS option_desc, sl.fortune_result FROM spin_log sl LEFT JOIN roulettes r ON r.id=sl.roulette_id LEFT JOIN roulette_options o ON o.id=sl.option_id WHERE sl.user_id=? ORDER BY sl.created_at DESC LIMIT 10',
+      [targetId]
+    );
+    const [cardInv] = await pool.query(
+      'SELECT uc.card_id, c.name, c.description, c.image_url, uc.qty, uc.expires_at FROM user_cards uc JOIN tarot_cards c ON c.id=uc.card_id WHERE uc.user_id=?',
+      [targetId]
+    );
+    const [cardUsage] = await pool.query(
+      'SELECT cu.used_at, c.id AS card_id, c.name AS card_name, cu.question FROM tarot_card_usage cu JOIN tarot_cards c ON c.id=cu.card_id WHERE cu.user_id=? ORDER BY cu.used_at DESC LIMIT 10',
+      [targetId]
+    );
+    const [cardDefs] = await pool.query('SELECT id, name, description, image_url FROM tarot_cards ORDER BY id');
+    cardInv.forEach(c => { c.expired = c.expires_at && new Date(c.expires_at) < new Date(); });
+    res.json({ spin_history: spinRows, card_inventory: cardInv, card_usage: cardUsage, card_definitions: cardDefs });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/cards', auth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT uc.card_id, c.name, c.description, c.image_url, uc.qty, uc.expires_at FROM user_cards uc JOIN tarot_cards c ON c.id=uc.card_id WHERE uc.user_id=? AND uc.qty > 0',
+      [req.user.id]
+    );
+    rows.forEach(r => { r.expired = r.expires_at && new Date(r.expires_at) < new Date(); });
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/cards/defs', auth, async (_req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT id, name, description, image_url FROM tarot_cards ORDER BY id');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/cards/logs', auth, adminOnly, async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT a.id, a.action, a.details, a.created_at, c.id AS card_id, c.name AS card_name, u.id AS user_id, u.username AS target_username, actor.username AS actor_username FROM card_audit_log a JOIN tarot_cards c ON c.id=a.card_id JOIN users u ON u.id=a.user_id LEFT JOIN users actor ON actor.id=a.actor_id ORDER BY a.created_at DESC LIMIT 50'
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cards', auth, adminOnly, async (req, res) => {
+  const { name, description, image_url } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nombre de carta requerido' });
+  try {
+    const [r] = await pool.query('INSERT INTO tarot_cards (name, description, image_url) VALUES (?,?,?)', [name.trim(), description?.trim() || '', image_url?.trim() || '']);
+    res.json({ ok: true, id: r.insertId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cards/:id', auth, adminOnly, async (req, res) => {
+  const cardId = parseInt(req.params.id, 10);
+  const { name, description, image_url } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nombre de carta requerido' });
+  try {
+    await pool.query('UPDATE tarot_cards SET name=?, description=?, image_url=? WHERE id=?', [name.trim(), description?.trim() || '', image_url?.trim() || '', cardId]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cards/:id', auth, adminOnly, async (req, res) => {
+  const cardId = parseInt(req.params.id, 10);
+  try {
+    await pool.query('DELETE FROM tarot_cards WHERE id=?', [cardId]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cards/use', auth, async (req, res) => {
+  const { card_id, question } = req.body;
+  const cardId = parseInt(card_id, 10);
+  if (!cardId || !question) return res.status(400).json({ error: 'Carta y pregunta son requeridas' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[row]] = await conn.query('SELECT qty, expires_at FROM user_cards WHERE user_id=? AND card_id=? LIMIT 1', [req.user.id, cardId]);
+    if (!row || row.qty < 1) { await conn.rollback(); return res.status(400).json({ error: 'No tienes esa carta' }); }
+    if (row.expires_at && new Date(row.expires_at) < new Date()) { await conn.rollback(); return res.status(400).json({ error: 'La carta ha expirado' }); }
+    await conn.query('UPDATE user_cards SET qty=0 WHERE user_id=? AND card_id=?', [req.user.id, cardId]);
+    await conn.query('INSERT INTO tarot_card_usage (user_id, card_id, question) VALUES (?,?,?)', [req.user.id, cardId, question.trim()]);
+    await conn.query('INSERT INTO card_audit_log (`action`,`user_id`,`card_id`,`actor_id`,`details`) VALUES ("use", ?, ?, ?, ?)', [req.user.id, cardId, req.user.id, question.trim()]);
+    await conn.commit();
+    res.json({ ok: true });
+  } catch (e) { await conn.rollback(); res.status(500).json({ error: e.message }); } finally { conn.release(); }
+});
+
+app.post('/api/cards/award', auth, adminOnly, async (req, res) => {
+  const { user_id, card_id } = req.body;
+  const targetId = parseInt(user_id, 10);
+  const cardId = parseInt(card_id, 10);
+  if (!targetId || !cardId) return res.status(400).json({ error: 'Faltan datos' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[row]] = await conn.query('SELECT qty, expires_at FROM user_cards WHERE user_id=? AND card_id=? LIMIT 1', [targetId, cardId]);
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    if (row) {
+      if (row.qty > 0 && (!row.expires_at || new Date(row.expires_at) > new Date())) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'El usuario ya tiene esa carta activa' });
+      }
+      await conn.query('UPDATE user_cards SET qty=1, expires_at=?, updated_at=NOW() WHERE user_id=? AND card_id=?', [expires, targetId, cardId]);
+    } else {
+      await conn.query('INSERT INTO user_cards (user_id, card_id, qty, expires_at) VALUES (?,?,1,?)', [targetId, cardId, expires]);
+    }
+    await conn.query('INSERT INTO card_audit_log (`action`,`user_id`,`card_id`,`actor_id`,`details`) VALUES ("award", ?, ?, ?, ?)', [targetId, cardId, req.user.id, 'Admin entregó carta']);
+    await conn.commit();
+    res.json({ ok: true, expires_at: expires });
+  } catch (e) { await conn.rollback(); res.status(500).json({ error: e.message }); } finally { conn.release(); }
+});
+
 // ════════════════════════════════════════════════════════════
 // TICKETS
 // ════════════════════════════════════════════════════════════
@@ -252,6 +372,7 @@ app.get('/api/roulettes', async (_req, res) => {
         img: o.image_url||'', prob: parseFloat(o.probability)||0,
         childRouletteId: o.child_roulette_id||'',
         givesTicketRarityId: o.gives_ticket_rarity_id ? Number(o.gives_ticket_rarity_id) : null,
+        givesCardId: o.gives_card_id ? Number(o.gives_card_id) : null,
       }));
       if (r.type === 'users') {
         rouletteOptions = users.map(u => ({
@@ -376,8 +497,8 @@ async function _insertOptions(conn, rouletteId, options) {
     const o = options[i];
     const oid = (o.id && o.id.startsWith('r')) ? o.id : genId();
     await conn.query(
-      'INSERT INTO roulette_options (id,roulette_id,name,description,image_url,probability,child_roulette_id,gives_ticket_rarity_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?)',
-      [oid, rouletteId, o.name||'', o.desc||'', o.img||'', o.prob||0, o.childRouletteId||null, o.givesTicketRarityId || null, i]);
+      'INSERT INTO roulette_options (id,roulette_id,name,description,image_url,probability,child_roulette_id,gives_ticket_rarity_id,gives_card_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [oid, rouletteId, o.name||'', o.desc||'', o.img||'', o.prob||0, o.childRouletteId||null, o.givesTicketRarityId || null, o.givesCardId || null, i]);
   }
 }
 

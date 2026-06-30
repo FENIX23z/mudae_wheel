@@ -50,6 +50,7 @@
     <nav class="sidebar-nav">
       <button class="snav-btn active" data-panel="roulettes">🎡 Ruletas</button>
       <button class="snav-btn" data-panel="users">👥 Usuarios</button>
+      <button class="snav-btn" data-panel="tarot">🔮 Tarot</button>
       <button class="snav-btn" data-panel="tickets">🎟 Tickets</button>
       <button class="snav-btn" data-panel="playlist">🎵 Playlist</button>
       <button class="snav-btn" data-panel="info">📜 Info Page</button>
@@ -98,6 +99,10 @@
           <div class="form-group"><label>Cooldown gratis (segundos)</label>
             <input type="number" id="ed-free-cooldown" min="0" step="60" value="0" placeholder="3600 = 1 hora / 1814400 = 3 semanas"/>
           </div>
+          <div class="form-group check-row">
+            <input type="checkbox" id="ed-allow-ticket" />
+            <label for="ed-allow-ticket">Permitir giro con ticket en ruletas gratis</label>
+          </div>
           <div class="form-group"><label>Rareza</label>
             <select id="ed-rarity"></select>
           </div>
@@ -142,6 +147,69 @@
         <span id="users-count" style="font-family:var(--font-u);font-size:.8rem;color:var(--text-m)"></span>
       </div>
       <div id="users-list" class="item-list"></div>
+    </section>
+
+    <!-- ════ PANEL: TAROT ════ -->
+    <section id="panel-tarot" class="admin-section hidden">
+      <div class="section-head">
+        <h2>Gestión de Tarot</h2>
+        <button class="btn btn-primary" id="btn-new-card">＋ Nueva Carta</button>
+      </div>
+      <div class="tarot-tabs" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost tarot-tab active" data-tab="cards">Cartas</button>
+        <button class="btn btn-sm btn-ghost tarot-tab" data-tab="logs">Registros</button>
+      </div>
+      <div id="tarot-cards-tab" class="tarot-tab-panel">
+        <div id="tarot-craft-panel" class="panel" style="margin-bottom:18px;padding:14px;">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:14px">
+            <div style="font-family:var(--font-u);font-size:.82rem;color:var(--text-m);min-width:120px">Configuración de crafteo</div>
+            <button class="btn btn-sm btn-primary" id="btn-save-craft-cost">Guardar</button>
+          </div>
+          <div style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);margin-bottom:12px">Define costo y activa/desactiva el crafteo por rareza. Si deshabilitas una rareza no podrá craftearse.</div>
+          <div style="overflow-x:auto">
+            <table class="adm-table" style="width:100%;min-width:520px;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th>De rareza</th>
+                  <th>Hacia</th>
+                  <th>Costo</th>
+                  <th>Habilitado</th>
+                </tr>
+              </thead>
+              <tbody id="tarot-craft-config-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tarot-card-list" class="item-list"></div>
+      </div>
+      <div id="tarot-logs-tab" class="tarot-tab-panel hidden">
+        <div class="admin-subsection" style="margin-top:0">
+          <h4 style="font-family:var(--font-d);color:var(--gold-l);letter-spacing:2px;margin-bottom:10px">Registro de cartas</h4>
+          <div id="tarot-log-list" class="item-list"></div>
+        </div>
+      </div>
+      <div id="tarot-editor" class="side-editor hidden">
+        <div class="side-editor-head">
+          <h3 id="editor-c-title">Nueva Carta de Tarot</h3>
+          <button class="btn-icon" id="editor-c-close">✕</button>
+        </div>
+        <div class="editor-body">
+          <div class="form-group"><label>Nombre</label>
+            <input type="text" id="ed-card-name" placeholder="Nombre de la carta"/>
+          </div>
+          <div class="form-group"><label>Descripción</label>
+            <textarea id="ed-card-desc" placeholder="Descripción breve…"></textarea>
+          </div>
+          <div class="form-group"><label>Imagen (URL)</label>
+            <input type="text" id="ed-card-img" placeholder="https://…"/>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="ed-card-save">💾 Guardar</button>
+            <button class="btn btn-ghost" id="ed-card-cancel">Cancelar</button>
+            <button class="btn btn-danger hidden" id="ed-card-delete">🗑 Eliminar</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ════ PANEL: TICKETS ════ -->

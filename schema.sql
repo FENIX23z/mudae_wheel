@@ -34,7 +34,8 @@ INSERT IGNORE INTO `app_settings` (`k`,`v`) VALUES
   ('shuffle','0'),
   ('loop','1'),
   ('volume','50'),
-  ('info_page','<h2>Bienvenido</h2><p>Esta es la sección de información. El admin puede editar este contenido.</p>');
+  ('info_page','<h2>Bienvenido</h2><p>Esta es la sección de información. El admin puede editar este contenido.</p>'),
+  ('craft_cost','9');
 
 -- ── Rarezas (catálogo) ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `rarities` (
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS `roulette_options` (
   `probability`            DECIMAL(8,4)   NOT NULL DEFAULT 0,
   `child_roulette_id`      VARCHAR(20)    DEFAULT NULL,
   `gives_ticket_rarity_id` TINYINT UNSIGNED DEFAULT NULL,
+  `gives_card_id`          INT UNSIGNED DEFAULT NULL,
   `sort_order`             SMALLINT       NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_ro_roulette` (`roulette_id`),
@@ -105,6 +107,7 @@ CREATE TABLE IF NOT EXISTS `roulette_options` (
 
 -- Migración: añadir columna si no existe (para bases ya creadas)
 ALTER TABLE `roulette_options` ADD COLUMN IF NOT EXISTS `gives_ticket_rarity_id` TINYINT UNSIGNED DEFAULT NULL;
+ALTER TABLE `roulette_options` ADD COLUMN IF NOT EXISTS `gives_card_id` INT UNSIGNED DEFAULT NULL;
 ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `spin_mode` VARCHAR(20) NOT NULL DEFAULT 'normal';
 ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `free_spin_cooldown_seconds` INT UNSIGNED NOT NULL DEFAULT 0;
 ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `allow_ticket_spin` TINYINT(1) NOT NULL DEFAULT 1;
@@ -127,6 +130,83 @@ CREATE TABLE IF NOT EXISTS `playlist_tracks` (
   `sort_order`  SMALLINT     NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Tarot cards ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `tarot_cards` (
+  `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name`        VARCHAR(120) NOT NULL,
+  `description` TEXT,
+  `image_url`   VARCHAR(512),
+  `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `user_cards` (
+  `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`     INT UNSIGNED NOT NULL,
+  `card_id`     INT UNSIGNED NOT NULL,
+  `qty`         INT UNSIGNED NOT NULL DEFAULT 0,
+  `expires_at`  DATETIME DEFAULT NULL,
+  `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_card` (`user_id`,`card_id`),
+  KEY `idx_uc_user` (`user_id`),
+  CONSTRAINT `fk_uc_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_uc_card` FOREIGN KEY (`card_id`) REFERENCES `tarot_cards`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `tarot_card_usage` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`     INT UNSIGNED NOT NULL,
+  `card_id`     INT UNSIGNED NOT NULL,
+  `question`    TEXT NOT NULL,
+  `used_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_tcu_user` (`user_id`),
+  CONSTRAINT `fk_tcu_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_tcu_card` FOREIGN KEY (`card_id`) REFERENCES `tarot_cards`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `card_audit_log` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `action`      ENUM('award','use','revoke','admin_change') NOT NULL,
+  `user_id`     INT UNSIGNED NOT NULL,
+  `card_id`     INT UNSIGNED NOT NULL,
+  `actor_id`    INT UNSIGNED DEFAULT NULL,
+  `details`     TEXT,
+  `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_cal_user` (`user_id`),
+  KEY `idx_cal_card` (`card_id`),
+  KEY `idx_cal_actor` (`actor_id`),
+  CONSTRAINT `fk_cal_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cal_card` FOREIGN KEY (`card_id`) REFERENCES `tarot_cards`(`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_cal_actor` FOREIGN KEY (`actor_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `tarot_cards` (`name`, `description`, `image_url`) VALUES
+  ('El Loco', 'Un viaje nuevo y lleno de posibilidades.', ''),
+  ('El Mago', 'Poder personal, recursos y acción enfocada.', ''),
+  ('La Sacerdotisa', 'Intuición, secretos y sabiduría interior.', ''),
+  ('La Emperatriz', 'Abundancia, creatividad y crecimiento.', ''),
+  ('El Emperador', 'Orden, liderazgo y autoridad.', ''),
+  ('El Hierofante', 'Tradición, guía espiritual y aprendizaje.', ''),
+  ('Los Enamorados', 'Decisiones, conexión y armonía.', ''),
+  ('El Carro', 'Voluntad, dirección y triunfo.', ''),
+  ('La Fuerza', 'Coraje, paciencia y autocontrol.', ''),
+  ('El Ermitaño', 'Reflexión, búsqueda interna y sabiduría.', ''),
+  ('La Rueda de la Fortuna', 'Cambio, destino y ciclos.', ''),
+  ('La Justicia', 'Equilibrio, verdad y consecuencias.', ''),
+  ('El Colgado', 'Perspectiva, sacrificio y pausa necesaria.', ''),
+  ('La Muerte', 'Transformación, finales y renacimiento.', ''),
+  ('La Templanza', 'Moderación, alineación y sanación.', ''),
+  ('El Diablo', 'Ataduras, tentaciones y sombras interiores.', ''),
+  ('La Torre', 'Ruptura, revelación y cambio repentino.', ''),
+  ('La Estrella', 'Esperanza, inspiración y claridad espiritual.', ''),
+  ('La Luna', 'Sueños, intuición y misterio profundo.', ''),
+  ('El Sol', 'Éxito, alegría y vitalidad.', ''),
+  ('El Juicio', 'Renacimiento, decisión y responsabilidad.', ''),
+  ('El Mundo', 'Cumplimiento, logro y conclusión total.', '');
 
 -- ── Log de giros ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `spin_log` (

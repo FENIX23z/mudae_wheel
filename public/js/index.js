@@ -317,6 +317,13 @@ function handleSpinResult(r, picked) {
       })
       .catch(() => {});
   }
+  if (opt.givesCardId && API.isLoggedIn()) {
+    API.post('/cards/award', { card_id: opt.givesCardId })
+      .then(() => {
+        toast('🃏 Carta de tarot obtenida!', 3500);
+      })
+      .catch(() => {});
+  }
 
   if (opt.childRouletteId) {
     const child = allRoulettes.find(x => x.id === opt.childRouletteId);

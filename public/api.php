@@ -59,11 +59,41 @@ function readJson() {
     return is_array($data) ? $data : [];
 }
 
+function getSetting($pdo, $key, $default = null) {
+    $stmt = $pdo->prepare('SELECT v FROM app_settings WHERE k=? LIMIT 1');
+    $stmt->execute([$key]);
+    $row = $stmt->fetch();
+    return $row ? $row['v'] : $default;
+}
+
+function getCraftCost($pdo, $fromRarityId) {
+    $key = "craft_cost_{$fromRarityId}";
+    $value = getSetting($pdo, $key, null);
+    if ($value !== null && $value !== '') {
+        return max(1, (int)$value);
+    }
+    return max(1, (int)getSetting($pdo, 'craft_cost', 9));
+}
+
+function isCraftEnabled($pdo, $fromRarityId) {
+    $key = "craft_enabled_{$fromRarityId}";
+    $value = strtolower((string)getSetting($pdo, $key, '1'));
+    return in_array($value, ['1', 'true', 'yes'], true);
+}
+
 // Detecta si la columna gives_ticket_rarity_id existe (con caché en static)
 function hasGivesTicketCol($pdo) {
     static $checked = null;
     if ($checked === null) {
         $stmt = $pdo->query("SHOW COLUMNS FROM roulette_options LIKE 'gives_ticket_rarity_id'");
+        $checked = (bool)$stmt->fetch();
+    }
+    return $checked;
+}
+function hasGivesCardCol($pdo) {
+    static $checked = null;
+    if ($checked === null) {
+        $stmt = $pdo->query("SHOW COLUMNS FROM roulette_options LIKE 'gives_card_id'");
         $checked = (bool)$stmt->fetch();
     }
     return $checked;
@@ -123,6 +153,29 @@ try {
                 requireAdmin($pdo);
                 $rows = $pdo->query('SELECT id, username, role, created_at FROM users ORDER BY id')->fetchAll();
                 jsonOut($rows);
+            } elseif ($method === 'GET' && count($segments) === 3 && $segments[2] === 'stats') {
+                if ($segments[1] === 'me') {
+                    $current = requireAuth($pdo);
+                    $targetId = $current['id'];
+                } else {
+                    requireAdmin($pdo);
+                    $targetId = (int)$segments[1];
+                }
+                $stmt = $pdo->prepare('SELECT sl.created_at, r.id AS roulette_id, r.name AS roulette_name, o.name AS option_name, o.description AS option_desc, sl.fortune_result FROM spin_log sl LEFT JOIN roulettes r ON r.id=sl.roulette_id LEFT JOIN roulette_options o ON o.id=sl.option_id WHERE sl.user_id=? ORDER BY sl.created_at DESC LIMIT 10');
+                $stmt->execute([$targetId]);
+                $spinHistory = $stmt->fetchAll();
+
+                $stmt = $pdo->prepare('SELECT uc.card_id, c.name, c.description, c.image_url, uc.qty, uc.expires_at FROM user_cards uc JOIN tarot_cards c ON c.id=uc.card_id WHERE uc.user_id=?');
+                $stmt->execute([$targetId]);
+                $cardInventory = $stmt->fetchAll();
+                foreach ($cardInventory as &$card) { $card['expired'] = $card['expires_at'] && strtotime($card['expires_at']) < time(); }
+
+                $stmt = $pdo->prepare('SELECT cu.used_at, c.id AS card_id, c.name AS card_name, cu.question FROM tarot_card_usage cu JOIN tarot_cards c ON c.id=cu.card_id WHERE cu.user_id=? ORDER BY cu.used_at DESC LIMIT 10');
+                $stmt->execute([$targetId]);
+                $cardUsage = $stmt->fetchAll();
+
+                $cardDefs = $pdo->query('SELECT id, name, description, image_url FROM tarot_cards ORDER BY id')->fetchAll();
+                jsonOut(['spin_history' => $spinHistory, 'card_inventory' => $cardInventory, 'card_usage' => $cardUsage, 'card_definitions' => $cardDefs]);
             } elseif ($method === 'PUT' && count($segments) === 3 && ($segments[2] ?? '') === 'role') {
                 requireAdmin($pdo);
                 $data = readJson();
@@ -168,15 +221,17 @@ try {
                 $data = readJson();
                 $fromId = (int)($data['from_rarity_id'] ?? 0);
                 if ($fromId < 1 || $fromId > 5) jsonOut(['error' => 'No se puede craftear desde esa rareza'], 400);
+                if (!isCraftEnabled($pdo, $fromId)) jsonOut(['error' => 'El crafteo desde esa rareza está deshabilitado'], 400);
                 $toId = $fromId + 1;
+                $craftCost = getCraftCost($pdo, $fromId);
                 $pdo->beginTransaction();
                 try {
                     $stmt = $pdo->prepare('SELECT qty FROM user_tickets WHERE user_id=? AND rarity_id=? FOR UPDATE');
                     $stmt->execute([$user['id'], $fromId]);
                     $row = $stmt->fetch();
                     $qty = (int)($row['qty'] ?? 0);
-                    if ($qty < 9) { $pdo->rollBack(); jsonOut(['error' => "Necesitas 9 tickets. Tienes $qty."], 400); }
-                    $pdo->prepare('UPDATE user_tickets SET qty=qty-9 WHERE user_id=? AND rarity_id=?')->execute([$user['id'], $fromId]);
+                    if ($qty < $craftCost) { $pdo->rollBack(); jsonOut(['error' => "Necesitas $craftCost tickets. Tienes $qty."], 400); }
+                    $pdo->prepare('UPDATE user_tickets SET qty=qty-? WHERE user_id=? AND rarity_id=?')->execute([$craftCost, $user['id'], $fromId]);
                     $pdo->prepare('INSERT INTO user_tickets (user_id, rarity_id, qty) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE qty=qty+1')->execute([$user['id'], $toId]);
                     $pdo->commit();
                     jsonOut(['ok' => true]);
@@ -208,6 +263,97 @@ try {
             }
             break;
 
+        case 'cards':
+            $user = requireAuth($pdo);
+            if ($method === 'GET' && count($segments) === 1) {
+                $stmt = $pdo->prepare('SELECT uc.card_id, c.name, c.description, c.image_url, uc.qty, uc.expires_at FROM user_cards uc JOIN tarot_cards c ON c.id=uc.card_id WHERE uc.user_id=? AND uc.qty > 0');
+                $stmt->execute([$user['id']]);
+                $rows = $stmt->fetchAll();
+                foreach ($rows as &$row) { $row['expired'] = $row['expires_at'] && strtotime($row['expires_at']) < time(); }
+                jsonOut($rows);
+            } elseif ($method === 'GET' && count($segments) === 2 && $segments[1] === 'defs') {
+                $rows = $pdo->query('SELECT id, name, description, image_url FROM tarot_cards ORDER BY id')->fetchAll();
+                jsonOut($rows);
+            } elseif ($method === 'GET' && count($segments) === 2 && $segments[1] === 'logs') {
+                requireAdmin($pdo);
+                $stmt = $pdo->query('SELECT a.id, a.action, a.details, a.created_at, c.id AS card_id, c.name AS card_name, u.id AS user_id, u.username AS target_username, actor.username AS actor_username FROM card_audit_log a JOIN tarot_cards c ON c.id=a.card_id JOIN users u ON u.id=a.user_id LEFT JOIN users actor ON actor.id=a.actor_id ORDER BY a.created_at DESC LIMIT 50');
+                jsonOut($stmt->fetchAll());
+            } elseif ($method === 'POST' && count($segments) === 1) {
+                requireAdmin($pdo);
+                $data = readJson();
+                $name = trim($data['name'] ?? '');
+                if (!$name) jsonOut(['error' => 'Nombre de carta requerido'], 400);
+                $stmt = $pdo->prepare('INSERT INTO tarot_cards (name, description, image_url) VALUES (?, ?, ?)');
+                $stmt->execute([$name, trim($data['description'] ?? ''), trim($data['image_url'] ?? '')]);
+                jsonOut(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+            } elseif ($method === 'PUT' && count($segments) === 2 && is_numeric($segments[1])) {
+                requireAdmin($pdo);
+                $cardId = (int)$segments[1];
+                $data = readJson();
+                $name = trim($data['name'] ?? '');
+                if (!$name) jsonOut(['error' => 'Nombre de carta requerido'], 400);
+                $pdo->prepare('UPDATE tarot_cards SET name=?, description=?, image_url=? WHERE id=?')->execute([$name, trim($data['description'] ?? ''), trim($data['image_url'] ?? ''), $cardId]);
+                jsonOut(['ok' => true]);
+            } elseif ($method === 'DELETE' && count($segments) === 2 && is_numeric($segments[1])) {
+                requireAdmin($pdo);
+                $cardId = (int)$segments[1];
+                $pdo->prepare('DELETE FROM tarot_cards WHERE id=?')->execute([$cardId]);
+                jsonOut(['ok' => true]);
+            } elseif ($method === 'GET' && count($segments) === 2 && is_numeric($segments[1])) {
+                requireAdmin($pdo);
+                $targetId = (int)$segments[1];
+                $stmt = $pdo->prepare('SELECT uc.card_id, c.name, c.description, c.image_url, uc.qty, uc.expires_at FROM user_cards uc JOIN tarot_cards c ON c.id=uc.card_id WHERE uc.user_id=?');
+                $stmt->execute([$targetId]);
+                $rows = $stmt->fetchAll();
+                foreach ($rows as &$row) { $row['expired'] = $row['expires_at'] && strtotime($row['expires_at']) < time(); }
+                jsonOut($rows);
+            } elseif ($method === 'POST' && count($segments) === 2 && $segments[1] === 'use') {
+                $data = readJson();
+                $cardId = (int)($data['card_id'] ?? 0);
+                $question = trim($data['question'] ?? '');
+                if (!$cardId || !$question) jsonOut(['error' => 'Carta y pregunta son requeridas'], 400);
+                $stmt = $pdo->prepare('SELECT qty, expires_at FROM user_cards WHERE user_id=? AND card_id=? LIMIT 1');
+                $stmt->execute([$user['id'], $cardId]);
+                $row = $stmt->fetch();
+                if (!$row || (int)$row['qty'] < 1) jsonOut(['error' => 'No tienes esa carta'], 400);
+                if ($row['expires_at'] && strtotime($row['expires_at']) < time()) jsonOut(['error' => 'La carta ha expirado'], 400);
+                $pdo->beginTransaction();
+                try {
+                    $pdo->prepare('UPDATE user_cards SET qty=0 WHERE user_id=? AND card_id=?')->execute([$user['id'], $cardId]);
+                    $pdo->prepare('INSERT INTO tarot_card_usage (user_id, card_id, question) VALUES (?, ?, ?)')->execute([$user['id'], $cardId, $question]);
+                    $pdo->prepare('INSERT INTO card_audit_log (`action`,`user_id`,`card_id`,`actor_id`,`details`) VALUES ("use", ?, ?, ?, ?)')->execute([$user['id'], $cardId, $user['id'], $question]);
+                    $pdo->commit();
+                    jsonOut(['ok' => true]);
+                } catch (Throwable $e) { $pdo->rollBack(); jsonOut(['error' => $e->getMessage()], 500); }
+            } elseif ($method === 'POST' && count($segments) === 2 && $segments[1] === 'award') {
+                $user = requireAuth($pdo);
+                $data = readJson();
+                $cardId = (int)($data['card_id'] ?? 0);
+                if (!$cardId) jsonOut(['error' => 'Faltan datos'], 400);
+                $targetId = $user['id'];
+                $actorId = $user['id'];
+                if (($user['role'] ?? '') === 'admin' && !empty($data['user_id'])) {
+                    $targetId = (int)$data['user_id'];
+                }
+                $stmt = $pdo->prepare('SELECT qty, expires_at FROM user_cards WHERE user_id=? AND card_id=? LIMIT 1');
+                $stmt->execute([$targetId, $cardId]);
+                $row = $stmt->fetch();
+                $expires = date('Y-m-d H:i:s', strtotime('+7 days'));
+                if ($row) {
+                    if ((int)$row['qty'] > 0 && (!$row['expires_at'] || strtotime($row['expires_at']) > time())) {
+                        jsonOut(['error' => 'El usuario ya tiene esa carta activa'], 400);
+                    }
+                    $pdo->prepare('UPDATE user_cards SET qty=1, expires_at=?, updated_at=NOW() WHERE user_id=? AND card_id=?')->execute([$expires, $targetId, $cardId]);
+                } else {
+                    $pdo->prepare('INSERT INTO user_cards (user_id, card_id, qty, expires_at) VALUES (?, ?, 1, ?)')->execute([$targetId, $cardId, $expires]);
+                }
+                $pdo->prepare('INSERT INTO card_audit_log (`action`,`user_id`,`card_id`,`actor_id`,`details`) VALUES ("award", ?, ?, ?, ?)')->execute([$targetId, $cardId, $actorId, ($actorId === $targetId ? 'Sistema' : 'Admin entregó carta')]);
+                jsonOut(['ok' => true, 'expires_at' => $expires]);
+            } else {
+                jsonOut(['error' => 'Método no permitido'], 405);
+            }
+            break;
+
         case 'roulettes':
             if ($method === 'GET' && count($segments) === 1) {
                 $roulettes = $pdo->query('SELECT r.*, ra.name AS rarity_name, ra.color AS rarity_color FROM roulettes r JOIN rarities ra ON ra.id=r.rarity_id WHERE r.is_active=1 ORDER BY r.sort_order, r.created_at')->fetchAll();
@@ -224,7 +370,17 @@ try {
                         foreach ($options as $o) {
                             if ((string)$o['roulette_id'] === (string)$r['id']) {
                                 $giveTicket = hasGivesTicketCol($pdo) && isset($o['gives_ticket_rarity_id']) ? ((int)$o['gives_ticket_rarity_id'] ?: null) : null;
-                                $opts[] = ['id' => $o['id'], 'name' => $o['name'] ?: '', 'desc' => $o['description'] ?: '', 'img' => $o['image_url'] ?: '', 'prob' => (float)$o['probability'], 'childRouletteId' => $o['child_roulette_id'] ?: '', 'givesTicketRarityId' => $giveTicket];
+                                $giveCard = hasGivesCardCol($pdo) && isset($o['gives_card_id']) ? ((int)$o['gives_card_id'] ?: null) : null;
+                                $opts[] = [
+                                    'id' => $o['id'],
+                                    'name' => $o['name'] ?: '',
+                                    'desc' => $o['description'] ?: '',
+                                    'img' => $o['image_url'] ?: '',
+                                    'prob' => (float)$o['probability'],
+                                    'childRouletteId' => $o['child_roulette_id'] ?: '',
+                                    'givesTicketRarityId' => $giveTicket,
+                                    'givesCardId' => $giveCard,
+                                ];
                             }
                         }
                     }
@@ -240,9 +396,10 @@ try {
                     $pdo->prepare('INSERT INTO roulettes (id, name, description, image_url, type, rarity_id, adapt_size, spin_mode, free_spin_cooldown_seconds, allow_ticket_spin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$rid, $data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0), isset($data['allow_ticket_spin']) && $data['allow_ticket_spin'] === false ? 0 : 1]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
-                        if (hasGivesTicketCol($pdo)) {
-                            $giveRarity = !empty($opt['givesTicketRarityId']) ? (int)$opt['givesTicketRarityId'] : null;
-                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, gives_ticket_rarity_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $giveRarity, $i]);
+                        if (hasGivesTicketCol($pdo) || hasGivesCardCol($pdo)) {
+                            $giveRarity = hasGivesTicketCol($pdo) && !empty($opt['givesTicketRarityId']) ? (int)$opt['givesTicketRarityId'] : null;
+                            $giveCard = hasGivesCardCol($pdo) && !empty($opt['givesCardId']) ? (int)$opt['givesCardId'] : null;
+                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, gives_ticket_rarity_id, gives_card_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $giveRarity, $giveCard, $i]);
                         } else {
                             $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $i]);
                         }
@@ -260,9 +417,10 @@ try {
                     $pdo->prepare('DELETE FROM roulette_options WHERE roulette_id=?')->execute([$rid]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
-                        if (hasGivesTicketCol($pdo)) {
-                            $giveRarity = !empty($opt['givesTicketRarityId']) ? (int)$opt['givesTicketRarityId'] : null;
-                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, gives_ticket_rarity_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $giveRarity, $i]);
+                        if (hasGivesTicketCol($pdo) || hasGivesCardCol($pdo)) {
+                            $giveRarity = hasGivesTicketCol($pdo) && !empty($opt['givesTicketRarityId']) ? (int)$opt['givesTicketRarityId'] : null;
+                            $giveCard = hasGivesCardCol($pdo) && !empty($opt['givesCardId']) ? (int)$opt['givesCardId'] : null;
+                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, gives_ticket_rarity_id, gives_card_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $giveRarity, $giveCard, $i]);
                         } else {
                             $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $i]);
                         }
@@ -352,12 +510,37 @@ try {
 
         case 'settings':
             if ($method === 'GET') {
-                $row = $pdo->query('SELECT v FROM app_settings WHERE k="info_page" LIMIT 1')->fetch();
-                jsonOut(['info_page' => $row['v'] ?? '']);
+                $allowedKeys = ['info_page', 'craft_cost'];
+                for ($i = 1; $i <= 5; $i++) {
+                    $allowedKeys[] = "craft_cost_{$i}";
+                    $allowedKeys[] = "craft_enabled_{$i}";
+                }
+                $placeholders = implode(',', array_fill(0, count($allowedKeys), '?'));
+                $stmt = $pdo->prepare("SELECT k, v FROM app_settings WHERE k IN ($placeholders)");
+                $stmt->execute($allowedKeys);
+                $rows = $stmt->fetchAll();
+                $result = ['info_page' => '', 'craft_cost' => '9'];
+                foreach ($rows as $row) {
+                    $result[$row['k']] = $row['v'];
+                }
+                jsonOut($result);
             } elseif ($method === 'PUT') {
                 requireAdmin($pdo);
                 $data = readJson();
-                $pdo->prepare('INSERT INTO app_settings (k, v) VALUES ("info_page", ?) ON DUPLICATE KEY UPDATE v=VALUES(v)')->execute([$data['info_page'] ?? '']);
+                $allowedKeys = ['info_page'];
+                for ($i = 1; $i <= 5; $i++) {
+                    $allowedKeys[] = "craft_cost_{$i}";
+                    $allowedKeys[] = "craft_enabled_{$i}";
+                }
+                $allowedKeys[] = 'craft_cost';
+
+                foreach ($data as $key => $value) {
+                    if (!in_array($key, $allowedKeys, true)) continue;
+                    if (strpos($key, 'craft_cost') === 0) {
+                        $value = max(1, (int)$value);
+                    }
+                    $pdo->prepare('INSERT INTO app_settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v)')->execute([$key, (string)$value]);
+                }
                 jsonOut(['ok' => true]);
             } else {
                 jsonOut(['error' => 'Método no permitido'], 405);

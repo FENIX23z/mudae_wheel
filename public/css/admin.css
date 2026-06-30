@@ -118,6 +118,16 @@ details[open]>.opt-item summary::after,
 .role-admin{background:rgba(255,193,7,.18);color:var(--r5);border:1px solid var(--r5)}
 .role-user{background:rgba(33,150,243,.12);color:var(--r3);border:1px solid var(--r3)}
 
+.user-detail{background:rgba(255,255,255,.04);border:1px solid rgba(176,107,32,.2);border-radius:10px;margin:8px 0 18px 0;padding:16px}
+.user-detail-inner{display:grid;gap:18px}
+.user-detail-grid{display:grid;grid-template-columns:1.2fr .9fr;gap:18px}
+.user-detail-col h4{margin:0 0 10px;font-family:var(--font-d);font-size:.96rem;color:var(--gold-l)}
+.user-detail-box{background:var(--bg-card);border:1px solid rgba(176,107,32,.15);border-radius:10px;padding:12px;display:grid;gap:10px}
+.user-stat-row, .user-card-row{background:rgba(255,255,255,.04);border:1px solid rgba(176,107,32,.12);border-radius:8px;padding:10px}
+.user-card-row.expired{opacity:.7;border-color:rgba(239,154,154,.35)}
+.user-card-row strong{color:var(--gold-l)}
+.user-stat-row strong{color:var(--gold-l)}
+
 /* ── Ticket manager ──────────────────────────────── */
 .ticket-row{
   display:flex;align-items:center;gap:14px;

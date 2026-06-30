@@ -18,6 +18,8 @@
 .ticket-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-top:20px}
 .ticket-box{background:var(--bg-card);border:2px solid;border-radius:12px;padding:18px;text-align:center;transition:box-shadow .2s}
 .ticket-box:hover{box-shadow:0 0 16px currentColor}
+.ticket-box.expired{opacity:.6;border-color:#ef9a9a}
+.ticket-box.expired .ticket-name{color:#ef9a9a}
 .ticket-icon-big{font-size:2.5rem;display:block;margin-bottom:8px}
 .ticket-name{font-family:var(--font-u);font-size:.8rem;letter-spacing:2px;margin-bottom:6px}
 .ticket-qty{font-family:var(--font-d);font-size:1.8rem;font-weight:bold}
@@ -66,6 +68,7 @@
 
   <div class="user-tabs">
     <button class="user-tab active" data-tab="inventory">🎟 Inventario</button>
+    <button class="user-tab" data-tab="stats">📊 Estadísticas</button>
     <button class="user-tab" data-tab="craft">⚗️ Craftear</button>
     <button class="user-tab" data-tab="info">📜 Información</button>
     <button class="user-tab" data-tab="settings">🔐 Ajustes</button>
@@ -77,6 +80,9 @@
       <h3 style="font-family:var(--font-d);color:var(--gold-l);letter-spacing:2px;margin-bottom:6px">Mis Tickets</h3>
       <p style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:1px">Usa tus tickets para girar las ruletas. Cada ruleta exige un ticket de su rareza.</p>
       <div class="ticket-grid" id="ticket-grid"></div>
+      <h3 style="font-family:var(--font-d);color:var(--gold-l);letter-spacing:2px;margin-top:28px;margin-bottom:6px">Tarot</h3>
+      <p style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:1px">Colecciona cartas únicas y úsalas con una pregunta.</p>
+      <div class="ticket-grid" id="card-grid"></div>
     </div>
   </div>
 
@@ -84,8 +90,17 @@
   <div class="tab-content" id="tab-craft">
     <div class="panel">
       <h3 style="font-family:var(--font-d);color:var(--gold-l);letter-spacing:2px;margin-bottom:6px">Taller de Crafteo</h3>
-      <p style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:1px;margin-bottom:4px">Combina 9 tickets de una rareza para obtener 1 de la rareza superior.</p>
+      <p id="craft-cost-note" style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:1px;margin-bottom:4px">Combina 9 tickets de una rareza para obtener 1 de la rareza superior.</p>
       <div class="craft-grid" id="craft-grid"></div>
+    </div>
+  </div>
+
+  <!-- ESTADÍSTICAS -->
+  <div class="tab-content" id="tab-stats">
+    <div class="panel">
+      <h3 style="font-family:var(--font-d);color:var(--gold-l);letter-spacing:2px;margin-bottom:6px">Estadísticas</h3>
+      <p style="font-family:var(--font-u);font-size:.78rem;color:var(--text-m);letter-spacing:1px">Consulta tus últimos giros y el uso reciente de cartas.</p>
+      <div id="user-stats"></div>
     </div>
   </div>
 
@@ -140,13 +155,45 @@ document.querySelectorAll('.user-tab').forEach(btn => {
 });
 
 let myTickets = [];
+let myCards = [];
+let userStats = { spin_history: [], card_usage: [] };
+let craftCost = 9;
 
 async function loadTickets() {
   try {
     myTickets = await API.get('/tickets');
   } catch { myTickets = []; }
+  await loadCraftSettings();
   renderInventory();
   renderCraft();
+}
+
+async function loadCraftSettings() {
+  try {
+    const settings = await API.get('/settings');
+    craftCost = Math.max(1, parseInt(settings.craft_cost, 10) || 9);
+  } catch {
+    craftCost = 9;
+  }
+
+  const note = document.getElementById('craft-cost-note');
+  if (note) note.textContent = `Combina ${craftCost} tickets de una rareza para obtener un ticket de la siguiente rareza.`;
+}
+
+async function loadCards() {
+  try {
+    myCards = await API.get('/cards');
+  } catch {
+    myCards = [];
+  }
+  renderCards();
+}
+
+async function loadUserStats() {
+  try {
+    userStats = await API.get('/users/me/stats');
+  } catch { userStats = { spin_history: [], card_usage: [] }; }
+  renderStats();
 }
 
 function renderInventory() {
@@ -173,20 +220,20 @@ function renderCraft() {
     const fromT = myTickets.find(t => t.rarity_id === from);
     const toT   = myTickets.find(t => t.rarity_id === from + 1);
     if (!fromT || !toT) continue;
-    const canCraft = fromT.qty >= 9;
+    const canCraft = fromT.qty >= craftCost;
     const card = document.createElement('div');
     card.className = 'craft-card';
     card.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:1.4rem">
-        <span style="color:${fromT.color}">${RARITY_ICONS[from] || '🎟'} ×9</span>
+        <span style="color:${fromT.color}">${RARITY_ICONS[from] || '🎟'} ×${craftCost}</span>
         <span class="craft-arrow">→</span>
         <span style="color:${toT.color}">${RARITY_ICONS[from+1] || '🎟'} ×1</span>
       </div>
       <div class="craft-formula" style="color:${fromT.color}">${fromT.name}</div>
-      <div class="craft-have-line" id="craft-have-${from}" style="font-family:var(--font-u);font-size:.72rem;color:var(--text-d);margin-bottom:10px">Tienes: <strong style="color:${fromT.color}">${fromT.qty}</strong> / 9</div>
+      <div class="craft-have-line" id="craft-have-${from}" style="font-family:var(--font-u);font-size:.72rem;color:var(--text-d);margin-bottom:10px">Tienes: <strong style="color:${fromT.color}">${fromT.qty}</strong> / ${craftCost}</div>
       <button class="btn ${canCraft ? 'btn-primary' : 'btn-ghost'}" style="width:100%;font-size:.8rem"
         ${canCraft ? '' : 'disabled'} data-from="${from}" id="craft-btn-${from}">
-        ${canCraft ? '⚗️ Craftear' : `Faltan ${9 - fromT.qty}`}
+        ${canCraft ? '⚗️ Craftear' : `Faltan ${Math.max(0, craftCost - fromT.qty)}`}
       </button>`;
     card.querySelector('button')?.addEventListener('click', async (evt) => {
       const btn = evt.currentTarget;
@@ -207,6 +254,72 @@ function renderCraft() {
   if (!grid.children.length) {
     grid.innerHTML = '<div class="empty"><span class="empty-icon">⚗️</span>Necesitas tickets para craftear.</div>';
   }
+}
+
+function renderCards() {
+  const grid = document.getElementById('card-grid');
+  grid.innerHTML = '';
+  if (!myCards.length) {
+    grid.innerHTML = '<div class="empty"><span class="empty-icon">🃏</span>No tienes cartas de tarot activas.</div>';
+    return;
+  }
+  myCards.forEach(c => {
+    const box = document.createElement('div');
+    box.className = 'ticket-box';
+    if (c.expired) box.classList.add('expired');
+    box.style.borderColor = '#8e44ad';
+    box.style.color = c.expired ? '#999' : '#e1bee7';
+    box.innerHTML = `
+      <span class="ticket-icon-big">🃏</span>
+      <div class="ticket-name">${c.name}</div>
+      <div class="ticket-qty">${c.qty}x</div>
+      <div style="font-size:.78rem;color:inherit;line-height:1.3;margin:10px 0;min-height:42px">${c.description || 'Carta de tarot única'}</div>
+      <button class="btn ${c.expired ? 'btn-ghost' : 'btn-primary'}" style="width:100%;font-size:.82rem" ${c.expired ? 'disabled' : ''} data-card="${c.card_id}">${c.expired ? 'Expirada' : 'Usar carta'}</button>`;
+    box.querySelector('button')?.addEventListener('click', async (evt) => {
+      const cardId = parseInt(evt.currentTarget.dataset.card, 10);
+      const question = prompt('Escribe tu pregunta para la carta de tarot:');
+      if (!question) return;
+      evt.currentTarget.disabled = true;
+      evt.currentTarget.textContent = '⏳ Usando...';
+      try {
+        await API.post('/cards/use', { card_id: cardId, question });
+        toast('La carta se ha usado. ¡Suerte!');
+        await loadCards();
+        await loadUserStats();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+    grid.appendChild(box);
+  });
+}
+
+function renderStats() {
+  const container = document.getElementById('user-stats');
+  const spins = userStats.spin_history || [];
+  const usage = userStats.card_usage || [];
+  const spinHtml = spins.length ? spins.map(s => `
+      <div style="margin-bottom:10px;padding:10px;border:1px solid rgba(176,107,32,.2);border-radius:8px;background:var(--bg-card)">
+        <div style="font-family:var(--font-u);color:var(--gold-l)">${new Date(s.created_at).toLocaleString('es-ES')}</div>
+        <div style="margin-top:6px;font-size:.95rem;"><strong>${s.roulette_name || 'Ruleta'}</strong> — ${s.option_name || (s.fortune_result !== null ? `Número ${s.fortune_result}` : 'Sin resultado')}</div>
+      </div>`).join('') : '<div class="empty"><span class="empty-icon">📉</span>No hay giros recientes.</div>';
+  const usageHtml = usage.length ? usage.map(u => `
+      <div style="margin-bottom:10px;padding:10px;border:1px solid rgba(176,107,32,.2);border-radius:8px;background:var(--bg-card)">
+        <div style="font-family:var(--font-u);color:var(--gold-l)">${new Date(u.used_at).toLocaleString('es-ES')}</div>
+        <div style="margin-top:6px;font-size:.95rem;"><strong>${u.card_name}</strong> — ${u.question}</div>
+      </div>`).join('') : '<div class="empty"><span class="empty-icon">✍️</span>No hay usos recientes de cartas.</div>';
+
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="panel" style="padding:16px">
+        <h4 style="font-family:var(--font-d);margin-bottom:8px;color:var(--gold-l)">Últimos 10 giros</h4>
+        ${spinHtml}
+      </div>
+      <div class="panel" style="padding:16px">
+        <h4 style="font-family:var(--font-d);margin-bottom:8px;color:var(--gold-l)">Usos recientes de cartas</h4>
+        ${usageHtml}
+      </div>
+    </div>`;
 }
 
 // Función para reproducir sonido de crafteo
@@ -256,6 +369,8 @@ function showPassMsg(txt, type) {
 
 (async () => {
   await loadTickets();
+  await loadCards();
+  await loadUserStats();
   await loadInfo();
   await MusicPlayer.init();
 })();
