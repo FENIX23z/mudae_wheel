@@ -59,6 +59,16 @@ function readJson() {
     return is_array($data) ? $data : [];
 }
 
+// Detecta si la columna gives_ticket_rarity_id existe (con caché en static)
+function hasGivesTicketCol($pdo) {
+    static $checked = null;
+    if ($checked === null) {
+        $stmt = $pdo->query("SHOW COLUMNS FROM roulette_options LIKE 'gives_ticket_rarity_id'");
+        $checked = (bool)$stmt->fetch();
+    }
+    return $checked;
+}
+
 try {
     switch ($first) {
         case 'register':
@@ -184,6 +194,15 @@ try {
                     $pdo->commit();
                     jsonOut(['ok' => true]);
                 } catch (Throwable $e) { $pdo->rollBack(); jsonOut(['error' => $e->getMessage()], 500); }
+            } elseif ($method === 'POST' && count($segments) === 2 && $segments[1] === 'award') {
+                $data = readJson();
+                $rarityId = (int)($data['rarity_id'] ?? 0);
+                if ($rarityId < 1 || $rarityId > 6) jsonOut(['error' => 'Rareza inválida'], 400);
+                $pdo->prepare('INSERT INTO user_tickets (user_id, rarity_id, qty) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE qty=qty+1')->execute([$user['id'], $rarityId]);
+                $stmt = $pdo->prepare('SELECT qty FROM user_tickets WHERE user_id=? AND rarity_id=?');
+                $stmt->execute([$user['id'], $rarityId]);
+                $row = $stmt->fetch();
+                jsonOut(['ok' => true, 'qty' => (int)($row['qty'] ?? 1)]);
             } else {
                 jsonOut(['error' => 'Método no permitido'], 405);
             }
@@ -198,7 +217,8 @@ try {
                     $opts = [];
                     foreach ($options as $o) {
                         if ((string)$o['roulette_id'] === (string)$r['id']) {
-                            $opts[] = ['id' => $o['id'], 'name' => $o['name'] ?: '', 'desc' => $o['description'] ?: '', 'img' => $o['image_url'] ?: '', 'prob' => (float)$o['probability'], 'childRouletteId' => $o['child_roulette_id'] ?: ''];
+                            $giveTicket = hasGivesTicketCol($pdo) && isset($o['gives_ticket_rarity_id']) ? ((int)$o['gives_ticket_rarity_id'] ?: null) : null;
+                            $opts[] = ['id' => $o['id'], 'name' => $o['name'] ?: '', 'desc' => $o['description'] ?: '', 'img' => $o['image_url'] ?: '', 'prob' => (float)$o['probability'], 'childRouletteId' => $o['child_roulette_id'] ?: '', 'givesTicketRarityId' => $giveTicket];
                         }
                     }
                     $result[] = ['id' => $r['id'], 'name' => $r['name'], 'desc' => $r['description'] ?: '', 'img' => $r['image_url'] ?: '', 'type' => $r['type'], 'rarity_id' => (int)$r['rarity_id'], 'rarity_name' => $r['rarity_name'], 'rarity_color' => $r['rarity_color'], 'adaptSize' => (bool)$r['adapt_size'], 'options' => $opts];
@@ -213,7 +233,12 @@ try {
                     $pdo->prepare('INSERT INTO roulettes (id, name, description, image_url, type, rarity_id, adapt_size) VALUES (?, ?, ?, ?, ?, ?, ?)')->execute([$rid, $data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
-                        $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?? '', $i]);
+                        if (hasGivesTicketCol($pdo)) {
+                            $giveRarity = !empty($opt['givesTicketRarityId']) ? (int)$opt['givesTicketRarityId'] : null;
+                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, gives_ticket_rarity_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $giveRarity, $i]);
+                        } else {
+                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $i]);
+                        }
                     }
                     $pdo->commit();
                     jsonOut(['ok' => true, 'id' => $rid]);
@@ -228,7 +253,12 @@ try {
                     $pdo->prepare('DELETE FROM roulette_options WHERE roulette_id=?')->execute([$rid]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
-                        $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?? '', $i]);
+                        if (hasGivesTicketCol($pdo)) {
+                            $giveRarity = !empty($opt['givesTicketRarityId']) ? (int)$opt['givesTicketRarityId'] : null;
+                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, gives_ticket_rarity_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $giveRarity, $i]);
+                        } else {
+                            $pdo->prepare('INSERT INTO roulette_options (id, roulette_id, name, description, image_url, probability, child_roulette_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')->execute([$oid, $rid, $opt['name'] ?? '', $opt['desc'] ?? '', $opt['img'] ?? '', (float)($opt['prob'] ?? 0), $opt['childRouletteId'] ?: null, $i]);
+                        }
                     }
                     $pdo->commit();
                     jsonOut(['ok' => true]);

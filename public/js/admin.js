@@ -139,7 +139,7 @@ function setupAdminEventListeners() {
   if (btnAddOpt) btnAddOpt.addEventListener('click', () => {
     const n = optionsData.length + 1;
     const eq = ProbManager.equalDistrib(n);
-    const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '' };
+    const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '', givesTicketRarityId: null };
     optionsData.push(newOpt);
     optionsData.forEach((o, i) => { o.prob = eq[i]; });
     refreshOptsList();
@@ -283,7 +283,7 @@ function openRouletteEditor(id) {
   fillRaritySelect('#ed-rarity', r?.rarity_id || 1);
 
   // Opciones: inicializa probs automáticas si están todas en 0
-  optionsData = (r?.options || []).map(o => ({ ...o }));
+  optionsData = (r?.options || []).map(o => ({ ...o, givesTicketRarityId: o.givesTicketRarityId ?? null }));
   if (optionsData.length && optionsData.every(o => !o.prob)) {
     const eq = ProbManager.equalDistrib(optionsData.length);
     optionsData.forEach((o, i) => { o.prob = eq[i]; });
@@ -336,6 +336,13 @@ function refreshOptsList() {
             `<option value="${r.id}" ${opt.childRouletteId === r.id ? 'selected' : ''}>${r.name}</option>`
           ).join('')}
         </select>
+        <label style="margin-top:10px">Da ticket al ganar esta opción</label>
+        <select class="opt-give-ticket" data-idx="${i}" style="accent-color:var(--copper)">
+          <option value="">— No dar ticket —</option>
+          ${RARITY_OPTIONS.map(r =>
+            `<option value="${r.id}" ${opt.givesTicketRarityId == r.id ? 'selected' : ''}>${r.name} (${r.color})</option>`
+          ).join('')}
+        </select>
       </div>`;
 
     // Eventos
@@ -377,6 +384,9 @@ function refreshOptsList() {
     });
 
     d.querySelector('.opt-child').addEventListener('change', e => { optionsData[i].childRouletteId = e.target.value; });
+    d.querySelector('.opt-give-ticket').addEventListener('change', e => {
+      optionsData[i].givesTicketRarityId = e.target.value ? parseInt(e.target.value) : null;
+    });
     list.appendChild(d);
   });
 }
@@ -385,7 +395,7 @@ $('#btn-add-opt').addEventListener('click', () => {
   // Distribuye automáticamente entre todas las opciones + nueva
   const n = optionsData.length + 1;
   const eq = ProbManager.equalDistrib(n);
-  const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '' };
+  const newOpt = { id: genId(), name: '', desc: '', img: '', prob: eq[n - 1], childRouletteId: '', givesTicketRarityId: null };
   optionsData.push(newOpt);
   optionsData.forEach((o, i) => { o.prob = eq[i]; });
   refreshOptsList();

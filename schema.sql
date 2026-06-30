@@ -85,19 +85,23 @@ CREATE TABLE IF NOT EXISTS `roulettes` (
 
 -- ── Opciones de ruleta ───────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `roulette_options` (
-  `id`                VARCHAR(20)    NOT NULL,
-  `roulette_id`       VARCHAR(20)    NOT NULL,
-  `name`              VARCHAR(120),
-  `description`       TEXT,
-  `image_url`         VARCHAR(512),
-  `probability`       DECIMAL(8,4)   NOT NULL DEFAULT 0,
-  `child_roulette_id` VARCHAR(20)    DEFAULT NULL,
-  `sort_order`        SMALLINT       NOT NULL DEFAULT 0,
+  `id`                     VARCHAR(20)    NOT NULL,
+  `roulette_id`            VARCHAR(20)    NOT NULL,
+  `name`                   VARCHAR(120),
+  `description`            TEXT,
+  `image_url`              VARCHAR(512),
+  `probability`            DECIMAL(8,4)   NOT NULL DEFAULT 0,
+  `child_roulette_id`      VARCHAR(20)    DEFAULT NULL,
+  `gives_ticket_rarity_id` TINYINT UNSIGNED DEFAULT NULL,
+  `sort_order`             SMALLINT       NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_ro_roulette` (`roulette_id`),
   CONSTRAINT `fk_ro_roulette` FOREIGN KEY (`roulette_id`) REFERENCES `roulettes`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_ro_child`    FOREIGN KEY (`child_roulette_id`) REFERENCES `roulettes`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Migración: añadir columna si no existe (para bases ya creadas)
+ALTER TABLE `roulette_options` ADD COLUMN IF NOT EXISTS `gives_ticket_rarity_id` TINYINT UNSIGNED DEFAULT NULL;
 
 -- ── Playlist ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `playlist_tracks` (

@@ -11,6 +11,7 @@ const toast = (msg, d=2600) => {
 let allRoulettes = [];
 let myTickets    = {};   // { rarity_id: qty }
 let session      = { stack: [] };
+let freeSpinsUsed = {}; // { rouletteId: true } — rastrea giros gratis usados por sesión
 
 /* ── Header nav ───────────────────────────────────── */
 function renderNav() {
@@ -118,11 +119,12 @@ function showCurrentStep() {
   $('#roulette-badge').innerHTML = `<span class="badge" style="color:${rc};border-color:${rc}">${r.rarity_name || 'Común'}</span>`;
 
   // Reinicia vistas
-  ['no-session-msg','no-ticket-msg','spin-btn','fortune-area','result-area'].forEach(id => {
+  ['no-session-msg','no-ticket-msg','spin-btn','free-spin-btn','fortune-area','result-area'].forEach(id => {
     const el = $(`#${id}`);
     if (el) el.classList.add('hidden');
   });
   $('#spin-btn').disabled = false;
+  $('#free-spin-btn').disabled = false;
 
   // Wheel
   if (r.type === 'fortune') {
@@ -140,11 +142,26 @@ function _resolveSpinButton(r) {
     $('#no-session-msg').classList.remove('hidden');
     return;
   }
+
+  // Botón giro gratis (siempre disponible si no lo ha usado esta sesión)
+  const freeBtn = $('#free-spin-btn');
+  const freeBtnText = $('#free-spin-btn-text');
+  if (!freeSpinsUsed[r.id]) {
+    freeBtn.classList.remove('hidden');
+    freeBtnText.textContent = 'Girar Gratis (sin ticket)';
+  } else {
+    freeBtn.classList.add('hidden');
+  }
+
+  // Botón giro normal (solo si tiene ticket)
   const qty = myTickets[r.rarity_id] ?? 0;
   if (qty < 1) {
-    const noEl = $('#no-ticket-msg');
-    noEl.textContent = `No tienes tickets de rareza ${r.rarity_name || 'Común'}. ¡Consíguelos en tu perfil!`;
-    noEl.classList.remove('hidden');
+    if (freeSpinsUsed[r.id]) {
+      // No tiene ticket ni giro gratis
+      const noEl = $('#no-ticket-msg');
+      noEl.textContent = `No tienes tickets de rareza ${r.rarity_name || 'Común'}. ¡Consíguelos en tu perfil!`;
+      noEl.classList.remove('hidden');
+    }
     return;
   }
   const spinBtn = $('#spin-btn');
@@ -157,6 +174,7 @@ function _resolveSpinButton(r) {
 
 $('#roulette-close').addEventListener('click', () => {
   $('#roulette-overlay').classList.add('hidden');
+  freeSpinsUsed = {}; // resetea giros gratis al cerrar
   WheelEngine.spinning = false;
 });
 
@@ -172,8 +190,27 @@ $('#spin-btn').addEventListener('click', async () => {
   } catch(e) { toast(e.message); return; }
 
   $('#spin-btn').disabled = true;
+  $('#free-spin-btn').classList.add('hidden');
   WheelEngine.spin(picked => {
     $('#spin-btn').disabled = false;
+    handleSpinResult(r, picked);
+  });
+});
+
+$('#free-spin-btn').addEventListener('click', async () => {
+  const step = session.stack[session.stack.length - 1];
+  const r    = allRoulettes.find(x => x.id === step.rouletteId);
+  if (!r || WheelEngine.spinning) return;
+  if (freeSpinsUsed[r.id]) { toast('Ya usaste tu giro gratis para esta ruleta'); return; }
+
+  // Marcar como usado
+  freeSpinsUsed[r.id] = true;
+  const user = API.user();
+  if (!user) { window.location.href = '/login.html'; return; }
+
+  $('#free-spin-btn').disabled = true;
+  $('#spin-btn').classList.add('hidden');
+  WheelEngine.spin(picked => {
     handleSpinResult(r, picked);
   });
 });
@@ -185,6 +222,17 @@ function handleSpinResult(r, picked) {
 
   // Log
   API.post('/spin-log', { roulette_id: r.id, option_id: opt.id }).catch(() => {});
+
+  // Auto-dar ticket si la opción lo tiene configurado
+  if (opt.givesTicketRarityId && API.isLoggedIn()) {
+    API.post('/tickets/award', { rarity_id: opt.givesTicketRarityId })
+      .then(res => {
+        const rarityNames = {1:'Común',2:'Inusual',3:'Raro',4:'Épico',5:'Legendario',6:'Mítico'};
+        toast(`🎟 +1 Ticket ${rarityNames[opt.givesTicketRarityId] || ''} obtenido!`, 3500);
+        if (res.qty !== undefined) myTickets[opt.givesTicketRarityId] = res.qty;
+      })
+      .catch(() => {});
+  }
 
   if (opt.childRouletteId) {
     const child = allRoulettes.find(x => x.id === opt.childRouletteId);
@@ -237,6 +285,7 @@ $('#num-plus').addEventListener('click', () => {
 
 function showResult(r, opt, fortuneNum) {
   $('#spin-btn').classList.add('hidden');
+  $('#free-spin-btn').classList.add('hidden');
   $('#fortune-area').classList.add('hidden');
   $('#result-area').classList.remove('hidden');
 
@@ -263,6 +312,7 @@ function showResult(r, opt, fortuneNum) {
 
 $('#result-restart').addEventListener('click', () => {
   $('#roulette-overlay').classList.add('hidden');
+  freeSpinsUsed = {}; // resetea giros gratis al cerrar
   session.stack = [];
   renderGrid(); // refresca contador tickets
 });

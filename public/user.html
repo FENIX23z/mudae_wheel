@@ -183,19 +183,24 @@ function renderCraft() {
         <span style="color:${toT.color}">${RARITY_ICONS[from+1] || '🎟'} ×1</span>
       </div>
       <div class="craft-formula" style="color:${fromT.color}">${fromT.name}</div>
-      <div style="font-family:var(--font-u);font-size:.72rem;color:var(--text-d);margin-bottom:10px">Tienes: <strong style="color:${fromT.color}">${fromT.qty}</strong> / 9</div>
+      <div class="craft-have-line" id="craft-have-${from}" style="font-family:var(--font-u);font-size:.72rem;color:var(--text-d);margin-bottom:10px">Tienes: <strong style="color:${fromT.color}">${fromT.qty}</strong> / 9</div>
       <button class="btn ${canCraft ? 'btn-primary' : 'btn-ghost'}" style="width:100%;font-size:.8rem"
-        ${canCraft ? '' : 'disabled'} data-from="${from}">
+        ${canCraft ? '' : 'disabled'} data-from="${from}" id="craft-btn-${from}">
         ${canCraft ? '⚗️ Craftear' : `Faltan ${9 - fromT.qty}`}
       </button>`;
-    card.querySelector('button')?.addEventListener('click', async () => {
+    card.querySelector('button')?.addEventListener('click', async (evt) => {
+      const btn = evt.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '⏳ Crafteando…';
       try {
         await API.post('/tickets/craft', { from_rarity_id: from });
-        // Reproducir sonido de crafteo
         playCraftSound();
         toast('¡Crafteo exitoso! ✨');
-        await loadTickets();
-      } catch(e) { toast(e.message); }
+        await loadTickets(); // refresca myTickets y re-renderiza ambas tarjetas
+      } catch(e) {
+        toast(e.message);
+        btn.disabled = false;
+      }
     });
     grid.appendChild(card);
   }
