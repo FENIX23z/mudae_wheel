@@ -204,7 +204,7 @@ try {
                 $row = $stmt->fetch();
                 jsonOut(['ok' => true, 'qty' => (int)($row['qty'] ?? 1)]);
             } else {
-                jsonOut(['error' => 'Método no permitido'], 405);
+                jsonOut(['error' => 'Método no permitido. Método: ' . $method . ', Ruta: ' . $path . ', Segmentos: ' . json_encode($segments)], 405);
             }
             break;
 
@@ -228,7 +228,7 @@ try {
                             }
                         }
                     }
-                    $result[] = ['id' => $r['id'], 'name' => $r['name'], 'desc' => $r['description'] ?: '', 'img' => $r['image_url'] ?: '', 'type' => $r['type'], 'rarity_id' => (int)$r['rarity_id'], 'rarity_name' => $r['rarity_name'], 'rarity_color' => $r['rarity_color'], 'adaptSize' => (bool)$r['adapt_size'], 'spin_mode' => $r['spin_mode'] ?? 'normal', 'free_spin_cooldown_seconds' => (int)($r['free_spin_cooldown_seconds'] ?? 0), 'options' => $opts];
+                    $result[] = ['id' => $r['id'], 'name' => $r['name'], 'desc' => $r['description'] ?: '', 'img' => $r['image_url'] ?: '', 'type' => $r['type'], 'rarity_id' => (int)$r['rarity_id'], 'rarity_name' => $r['rarity_name'], 'rarity_color' => $r['rarity_color'], 'adaptSize' => (bool)$r['adapt_size'], 'spin_mode' => $r['spin_mode'] ?? 'normal', 'free_spin_cooldown_seconds' => (int)($r['free_spin_cooldown_seconds'] ?? 0), 'allow_ticket_spin' => isset($r['allow_ticket_spin']) ? (bool)$r['allow_ticket_spin'] : true, 'options' => $opts];
                 }
                 jsonOut($result);
             } elseif ($method === 'POST' && count($segments) === 1) {
@@ -237,7 +237,7 @@ try {
                 $rid = $data['id'] ?: 'r' . bin2hex(random_bytes(4));
                 $pdo->beginTransaction();
                 try {
-                    $pdo->prepare('INSERT INTO roulettes (id, name, description, image_url, type, rarity_id, adapt_size, spin_mode, free_spin_cooldown_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$rid, $data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0)]);
+                    $pdo->prepare('INSERT INTO roulettes (id, name, description, image_url, type, rarity_id, adapt_size, spin_mode, free_spin_cooldown_seconds, allow_ticket_spin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')->execute([$rid, $data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0), isset($data['allow_ticket_spin']) && $data['allow_ticket_spin'] === false ? 0 : 1]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));
                         if (hasGivesTicketCol($pdo)) {
@@ -256,7 +256,7 @@ try {
                 $rid = $segments[1];
                 $pdo->beginTransaction();
                 try {
-                    $pdo->prepare('UPDATE roulettes SET name=?, description=?, image_url=?, type=?, rarity_id=?, adapt_size=?, spin_mode=?, free_spin_cooldown_seconds=? WHERE id=?')->execute([$data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0), $rid]);
+                    $pdo->prepare('UPDATE roulettes SET name=?, description=?, image_url=?, type=?, rarity_id=?, adapt_size=?, spin_mode=?, free_spin_cooldown_seconds=?, allow_ticket_spin=? WHERE id=?')->execute([$data['name'] ?? '', $data['desc'] ?? '', $data['img'] ?? '', $data['type'] ?? 'normal', (int)($data['rarity_id'] ?? 1), !empty($data['adaptSize']) ? 1 : 0, $data['spin_mode'] ?? 'normal', (int)($data['free_spin_cooldown_seconds'] ?? 0), isset($data['allow_ticket_spin']) && $data['allow_ticket_spin'] === false ? 0 : 1, $rid]);
                     $pdo->prepare('DELETE FROM roulette_options WHERE roulette_id=?')->execute([$rid]);
                     foreach (($data['options'] ?? []) as $i => $opt) {
                         $oid = $opt['id'] ?: 'o' . bin2hex(random_bytes(4));

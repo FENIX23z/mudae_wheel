@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS `roulettes` (
   `adapt_size`              TINYINT(1)   NOT NULL DEFAULT 0,
   `spin_mode`               VARCHAR(20)  NOT NULL DEFAULT 'normal',
   `free_spin_cooldown_seconds` INT UNSIGNED NOT NULL DEFAULT 0,
+  `allow_ticket_spin`          TINYINT(1)   NOT NULL DEFAULT 1,
   `sort_order`              SMALLINT     NOT NULL DEFAULT 0,
   `is_active`               TINYINT(1)   NOT NULL DEFAULT 1,
   `created_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -106,6 +107,7 @@ CREATE TABLE IF NOT EXISTS `roulette_options` (
 ALTER TABLE `roulette_options` ADD COLUMN IF NOT EXISTS `gives_ticket_rarity_id` TINYINT UNSIGNED DEFAULT NULL;
 ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `spin_mode` VARCHAR(20) NOT NULL DEFAULT 'normal';
 ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `free_spin_cooldown_seconds` INT UNSIGNED NOT NULL DEFAULT 0;
+ALTER TABLE `roulettes` ADD COLUMN IF NOT EXISTS `allow_ticket_spin` TINYINT(1) NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS `roulette_free_spin_state` (
   `user_id`      INT UNSIGNED NOT NULL,

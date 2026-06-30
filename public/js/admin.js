@@ -137,6 +137,12 @@ function setupAdminEventListeners() {
     closeEditor();
   });
   
+  const edDuplicate = $('#ed-duplicate');
+  if (edDuplicate) edDuplicate.addEventListener('click', async () => {
+    if (!editingId) return;
+    await duplicateRoulette(editingId);
+  });
+  
   const btnAddOpt = $('#btn-add-opt');
   if (btnAddOpt) btnAddOpt.addEventListener('click', () => {
     const n = optionsData.length + 1;
@@ -268,6 +274,31 @@ async function deleteRoulette(id) {
   await loadRoulettes();
 }
 
+async function duplicateRoulette(id) {
+  const r = allRoulettes.find(x => x.id === id);
+  if (!r) return;
+  
+  const body = {
+    id: 'r' + Math.random().toString(36).slice(2, 10),
+    name: r.name + ' (Copia)',
+    type: r.type,
+    rarity_id: r.rarity_id,
+    desc: r.desc,
+    img: r.img,
+    adaptSize: r.adaptSize,
+    spin_mode: r.spin_mode,
+    free_spin_cooldown_seconds: r.free_spin_cooldown_seconds,
+    options: r.options.map(o => ({ ...o, id: genId() }))
+  };
+  
+  try {
+    await API.post('/roulettes', body);
+    toast('Ruleta duplicada ✓');
+    await loadRoulettes();
+    closeEditor();
+  } catch (e) { toast('Error: ' + e.message); }
+}
+
 function closeEditor() {
   $('#roulette-editor').classList.add('hidden');
   editingId = null; optionsData = [];
@@ -294,6 +325,7 @@ function openRouletteEditor(id) {
   }
   refreshOptsList();
   id ? $('#ed-delete').classList.remove('hidden') : $('#ed-delete').classList.add('hidden');
+  id ? $('#ed-duplicate').classList.remove('hidden') : $('#ed-duplicate').classList.add('hidden');
   
   // Mostrar/ocultar sección de opciones según tipo
   const edType = $('#ed-type');

@@ -14,6 +14,36 @@ let session      = { stack: [] };
 let freeSpinsUsed = {}; // { rouletteId: true } — rastrea giros gratis usados por sesión
 let freeSpinCooldowns = {}; // { rouletteId: remainingSeconds }
 
+/* ── Sonido de spin ───────────────────────────────── */
+function playSpinSound() {
+  const audio = new Audio('https://files.catbox.moe/wnwygz.mp3');
+  audio.volume = 0.7;
+  audio.play().catch(() => {}); // Ignora errores silenciosamente
+}
+
+/* ── Formatear cooldown ────────────────────────────── */
+function formatCooldown(seconds) {
+  const s = Math.ceil(seconds);
+  const WEEK = 604800;  // 7 * 24 * 60 * 60
+  const DAY = 86400;    // 24 * 60 * 60
+  const HOUR = 3600;    // 60 * 60
+  const MIN = 60;
+  
+  if (s >= WEEK) {
+    const weeks = Math.floor(s / WEEK);
+    return `${weeks} semana${weeks > 1 ? 's' : ''}`;
+  } else if (s >= DAY) {
+    const days = Math.floor(s / DAY);
+    return `${days} día${days > 1 ? 's' : ''}`;
+  } else if (s >= HOUR) {
+    const hours = Math.floor(s / HOUR);
+    return `${hours} hora${hours > 1 ? 's' : ''}`;
+  } else {
+    const mins = Math.floor(s / MIN);
+    return `${mins} minuto${mins > 1 ? 's' : ''}`;
+  }
+}
+
 /* ── Header nav ───────────────────────────────────── */
 function renderNav() {
   const nav = $('#header-nav');
@@ -86,6 +116,7 @@ function renderGrid() {
           data-id="${r.id}">
           ${r.spin_mode === 'free' ? '🎲 Giro Gratis · ' + rl : '🎟 Gastar Ticket · ' + rl}
           ${API.isLoggedIn() && r.spin_mode !== 'free' ? `<span style="margin-left:8px;font-size:.75rem;opacity:.8">(${qty})</span>` : ''}
+          ${API.isLoggedIn() && r.spin_mode === 'free' && r.allow_ticket_spin !== false && qty > 0 ? `<span style="margin-left:8px;font-size:.75rem;opacity:.8">🎟(${qty})</span>` : ''}
         </button>
       </div>`;
 
@@ -131,13 +162,14 @@ function showCurrentStep() {
   if (r.type === 'fortune') {
     WheelEngine.init($('#wheel-canvas'), [], false, r.rarity_id);
     $('#fortune-area').classList.remove('hidden');
+    _resolveSpinButton(r, false);
   } else {
     WheelEngine.init($('#wheel-canvas'), r.options, r.adaptSize, r.rarity_id);
     _resolveSpinButton(r);
   }
 }
 
-async function _resolveSpinButton(r) {
+async function _resolveSpinButton(r, showNormalSpin = true) {
   const user = API.user();
   if (!user) {
     $('#no-session-msg').classList.remove('hidden');
@@ -148,9 +180,14 @@ async function _resolveSpinButton(r) {
   const freeBtnText = $('#free-spin-btn-text');
   const spinBtn = $('#spin-btn');
   const qty = myTickets[r.rarity_id] ?? 0;
+  // allow_ticket_spin: si es undefined o true => permitido; si es explicitamente false => no
+  const ticketsAllowed = r.allow_ticket_spin !== false;
 
   if (r.spin_mode === 'free') {
-    spinBtn.classList.add('hidden');
+    // Solo ocultar spin-btn si tickets no permitidos
+    if (!ticketsAllowed) {
+      spinBtn.classList.add('hidden');
+    }
     try {
       const status = await API.get(`/roulette/free-spin-status/${r.id}`);
       const canFreeSpin = status.enabled && !freeSpinsUsed[r.id];
@@ -161,7 +198,7 @@ async function _resolveSpinButton(r) {
       } else {
         freeBtn.classList.add('hidden');
         if (status.remaining_seconds > 0) {
-          freeBtnText.textContent = `Cooldown ${Math.ceil(status.remaining_seconds / 60)} min`;
+          freeBtnText.textContent = `Cooldown ${formatCooldown(status.remaining_seconds)}`;
           freeBtn.classList.remove('hidden');
           freeBtn.disabled = true;
         }
@@ -169,26 +206,41 @@ async function _resolveSpinButton(r) {
     } catch {
       freeBtn.classList.add('hidden');
     }
+    // Si tickets están permitidos en esta ruleta free, mostrar botón de ticket también
+    if (ticketsAllowed && qty >= 1) {
+      spinBtn.classList.remove('hidden');
+      const rc = r.rarity_color || '#b06b20';
+      spinBtn.style.borderColor = rc;
+      spinBtn.style.color       = rc;
+      $('#spin-btn-text').textContent = `Gastar Ticket · ${r.rarity_name || ''} (${qty})`;
+    }
   } else {
     // spin_mode !== 'free', NO mostrar botón de giro gratis
     freeBtn.classList.add('hidden');
   }
 
   if (qty < 1) {
-    // Only show "no tickets" message if it's NOT a free-spin roulette
-    if (r.spin_mode !== 'free') {
+    // Only show "no tickets" message if it's NOT a free-spin roulette (or tickets allowed but none)
+    if (r.spin_mode !== 'free' || ticketsAllowed) {
       const noEl = $('#no-ticket-msg');
-      noEl.textContent = `No tienes tickets de rareza ${r.rarity_name || 'Común'}. ¡Consíguelos en tu perfil!`;
-      noEl.classList.remove('hidden');
+      if (r.spin_mode !== 'free') {
+        noEl.textContent = `No tienes tickets de rareza ${r.rarity_name || 'Común'}. ¡Consíguelos en tu perfil!`;
+        noEl.classList.remove('hidden');
+      } else if (ticketsAllowed) {
+        // Es free pero también permite tickets y no tiene: no mostrar error bloqueante
+        // (el giro gratis sigue disponible)
+      }
     }
-    return;
+    if (r.spin_mode !== 'free') return;
   }
 
-  spinBtn.classList.remove('hidden');
-  const rc = r.rarity_color || '#b06b20';
-  spinBtn.style.borderColor = rc;
-  spinBtn.style.color       = rc;
-  $('#spin-btn-text').textContent = `Gastar Ticket · ${r.rarity_name || ''} (${qty})`;
+  if (r.spin_mode !== 'free' && showNormalSpin) {
+    spinBtn.classList.remove('hidden');
+    const rc = r.rarity_color || '#b06b20';
+    spinBtn.style.borderColor = rc;
+    spinBtn.style.color       = rc;
+    $('#spin-btn-text').textContent = `Gastar Ticket · ${r.rarity_name || ''} (${qty})`;
+  }
 }
 
 $('#roulette-close').addEventListener('click', () => {
@@ -202,7 +254,7 @@ $('#spin-btn').addEventListener('click', async () => {
   const r    = allRoulettes.find(x => x.id === step.rouletteId);
   if (!r || WheelEngine.spinning) return;
 
-  if (r.spin_mode === 'free') {
+  if (r.spin_mode === 'free' && r.allow_ticket_spin === false) {
     toast('Esta ruleta solo se juega con giro gratis');
     return;
   }
@@ -215,6 +267,7 @@ $('#spin-btn').addEventListener('click', async () => {
 
   $('#spin-btn').disabled = true;
   $('#free-spin-btn').classList.add('hidden');
+  playSpinSound();
   WheelEngine.spin(picked => {
     $('#spin-btn').disabled = false;
     handleSpinResult(r, picked);
@@ -240,6 +293,7 @@ $('#free-spin-btn').addEventListener('click', async () => {
   freeSpinsUsed[r.id] = true;
   $('#free-spin-btn').disabled = true;
   $('#spin-btn').classList.add('hidden');
+  playSpinSound();
   WheelEngine.spin(picked => {
     handleSpinResult(r, picked);
   });

@@ -39,6 +39,12 @@ try {
         $pdo->exec("CREATE TABLE roulette_free_spin_state (user_id INT UNSIGNED NOT NULL, roulette_id VARCHAR(20) NOT NULL, last_used_at DATETIME DEFAULT NULL, PRIMARY KEY (user_id, roulette_id), KEY idx_rfs_roulette (roulette_id), CONSTRAINT fk_rfs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, CONSTRAINT fk_rfs_roulette FOREIGN KEY (roulette_id) REFERENCES roulettes(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         echo '<p style="color:green">✅ Tabla <b>roulette_free_spin_state</b> creada.</p>';
     }
+    $stmt = $pdo->query("SHOW COLUMNS FROM roulettes LIKE 'allow_ticket_spin'");
+    if (!$stmt->fetch()) {
+        $pdo->exec("ALTER TABLE roulettes ADD COLUMN allow_ticket_spin TINYINT(1) NOT NULL DEFAULT 1");
+        echo '<p style="color:green">✅ Columna <b>allow_ticket_spin</b> añadida a <b>roulettes</b>.</p>';
+    }
+
     echo '<p style="color:green">✅ Soporte para giros gratis con cooldown añadido.</p>';
     echo '<p style="color:orange">⚠️ Recuerda eliminar este archivo migrate.php del servidor.</p>';
 } catch (Exception $e) {

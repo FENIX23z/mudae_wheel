@@ -271,6 +271,7 @@ app.get('/api/roulettes', async (_req, res) => {
         desc: r.description || '',
         spin_mode: r.spin_mode || 'normal',
         free_spin_cooldown_seconds: Number(r.free_spin_cooldown_seconds || 0),
+        allow_ticket_spin: r.allow_ticket_spin !== 0, // columna TINYINT, 0=false, 1=true
         options: rouletteOptions,
       };
     });
@@ -330,15 +331,15 @@ app.post('/api/roulette/free-spin', auth, async (req, res) => {
 });
 
 app.post('/api/roulettes', auth, adminOnly, async (req, res) => {
-  const { id, name, type, rarity_id, desc, img, adaptSize, spin_mode, free_spin_cooldown_seconds, options=[] } = req.body;
+  const { id, name, type, rarity_id, desc, img, adaptSize, spin_mode, free_spin_cooldown_seconds, allow_ticket_spin, options=[] } = req.body;
   if (!name) return res.status(400).json({ error: 'Nombre requerido' });
   const rid = id || genId();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     await conn.query(
-      'INSERT INTO roulettes (id,name,description,image_url,type,rarity_id,adapt_size,spin_mode,free_spin_cooldown_seconds) VALUES (?,?,?,?,?,?,?,?,?)',
-      [rid, name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, spin_mode||'normal', Number(free_spin_cooldown_seconds||0)]);
+      'INSERT INTO roulettes (id,name,description,image_url,type,rarity_id,adapt_size,spin_mode,free_spin_cooldown_seconds,allow_ticket_spin) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [rid, name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, spin_mode||'normal', Number(free_spin_cooldown_seconds||0), allow_ticket_spin===false?0:1]);
     await _insertOptions(conn, rid, options);
     await conn.commit();
     res.json({ ok:true, id: rid });
@@ -347,13 +348,13 @@ app.post('/api/roulettes', auth, adminOnly, async (req, res) => {
 });
 
 app.put('/api/roulettes/:id', auth, adminOnly, async (req, res) => {
-  const { name, type, rarity_id, desc, img, adaptSize, options=[] } = req.body;
+  const { name, type, rarity_id, desc, img, adaptSize, spin_mode, free_spin_cooldown_seconds, allow_ticket_spin, options=[] } = req.body;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     await conn.query(
-      'UPDATE roulettes SET name=?,description=?,image_url=?,type=?,rarity_id=?,adapt_size=?,spin_mode=?,free_spin_cooldown_seconds=? WHERE id=?',
-      [name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, spin_mode||'normal', Number(free_spin_cooldown_seconds||0), req.params.id]);
+      'UPDATE roulettes SET name=?,description=?,image_url=?,type=?,rarity_id=?,adapt_size=?,spin_mode=?,free_spin_cooldown_seconds=?,allow_ticket_spin=? WHERE id=?',
+      [name, desc||'', img||'', type||'normal', rarity_id||1, adaptSize?1:0, spin_mode||'normal', Number(free_spin_cooldown_seconds||0), allow_ticket_spin===false?0:1, req.params.id]);
     await conn.query('DELETE FROM roulette_options WHERE roulette_id=?', [req.params.id]);
     await _insertOptions(conn, req.params.id, options);
     await conn.commit();
